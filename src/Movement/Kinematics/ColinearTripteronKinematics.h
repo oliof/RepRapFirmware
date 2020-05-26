@@ -39,18 +39,34 @@ protected:
 	DECLARE_OBJECT_MODEL
 
 private:
+    void Init() noexcept;
+    void Recalc() noexcept;
+	
+    // colinear tripteron default values
+	// arm angle in degrees
 	static constexpr float DefaultArmAngle = 30;
+    // tower rotations in degrees. a tower is assumed not rotated
 	static constexpr float DefaultATowerRotation = 0;
-	static constexpr float DefaultBTowerRotation = 1;
-	static constexpr float DefaultCTowerRotation = 2;
+	static constexpr float DefaultBTowerRotation = 120;
+	static constexpr float DefaultCTowerRotation = 240;
+    // print area limits in mm
 	static constexpr float DefaultPrintRadius = 120;
     static constexpr float DefaultHomedHeight = 220;
-
 	static constexpr size_t NumTowers = 3;
+	// internal tower names
 	static constexpr size_t A_TOWER = 0;
 	static constexpr size_t B_TOWER = 1;
-	static constexpr size_t C_TOWER = 2;
+	static constexpr size_t C_TOWER = 2; 
 
-    void Init();
-    void Recalc(); 
+	// core parameters
+	float armAngle;              // angle of the arms
+	float printRadius;           // printable radius
+	float homedHeight; 
+
+	// derived parameters
+	float towerX[NumTowers];     // X position of every tower
+	float towerY[NumTowers];     // Y position of every tower
+	float printRadiusSquared;
+	float alwaysReachableHeight; 
+
 }
