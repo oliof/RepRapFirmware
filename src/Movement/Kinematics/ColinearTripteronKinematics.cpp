@@ -16,11 +16,13 @@
 
 #define PIOVER180 0.01745329251994329576923690768489F
 
+
 // Return the name of the current kinematics
 const char *ColinearTripteronKinematics::GetName(bool forStatusReport) const noexcept
 {
         return (forStatusReport) ? "colineartripteron" : "Colinear Tripteron";
 }
+
 
 void ColinearTripteronKinematics::Init() const noexcept
 {
@@ -33,6 +35,33 @@ void ColinearTripteronKinematics::Init() const noexcept
 
         Recalc();
 }
+
+
+void ColinearTripteronKinematics::Recalc()
+{
+	// arm angle and tangent
+	arm_angle = PIOVER180*armAngle;
+	arm_angle_tan = tanf(arm_angle);
+	// tower rotations
+	a_tower_rotation = PIOVER180*aTowerRotation;
+	b_tower_rotation = PIOVER180*bTowerRotation;
+	c_tower_rotation = PIOVER180*bTowerRotation;
+        // tower reductions and tangent coefficients
+	a_tower_x = sinf(a_tower_rotation) * arm_angle_tan;
+	a_tower_y = cosf(a_tower_rotation) * arm_angle_tan;
+	b_tower_x = sinf(b_tower_rotation) * arm_angle_tan;
+	b_tower_x = cosf(b_tower_rotation) * arm_angle_tan;
+	c_tower_x = sinf(c_tower_rotation) * arm_angle_tan;
+	c_tower_x = cosf(c_tower_rotation) * arm_angle_tan;
+        // forward kinematics matrix denominator
+        denominator = a_tower_y * b_tower_x -
+                      c_tower_y * b_tower_x -
+                      a_tower_y * b_tower_y -
+                      a_tower_y * c_tower_x +
+                      b_tower_y * c_tower_x +
+                      a_tower_x * g_tower_y;
+}
+
 
 bool ColinearTripteronKinematics::Configure(unsigned int mCode, GCodeBuffer& gb, const StringRef& reply, bool& error) THROWS(GCodeException)
 {
@@ -61,33 +90,20 @@ bool ColinearTripteronKinematics::Configure(unsigned int mCode, GCodeBuffer& gb,
 	}
 }
 
-void ColinearTripteronKinematics::Recalc()
-{
-	// arm angle and tangent
-	arm_angle = PIOVER180*armAngle;
-	arm_angle_tan = tanf(arm_angle);
-	// tower rotations
-	a_tower_rotation = PIOVER180*aTowerRotation;
-	b_tower_rotation = PIOVER180*bTowerRotation;
-	c_tower_rotation = PIOVER180*bTowerRotation;
-        // tower reductions and tangent coefficients
-	a_tower_x = sinf(a_tower_rotation) * arm_angle_tan;
-	a_tower_y = cosf(a_tower_rotation) * arm_angle_tan;
-	b_tower_x = sinf(b_tower_rotation) * arm_angle_tan;
-	b_tower_x = cosf(b_tower_rotation) * arm_angle_tan;
-	c_tower_x = sinf(c_tower_rotation) * arm_angle_tan;
-	c_tower_x = cosf(c_tower_rotation) * arm_angle_tan;
-        // forward kinematics matrix denominator
-        denominator = a_tower_y * b_tower_x -
-                      c_tower_y * b_tower_x -
-                      a_tower_y * b_tower_y -
-                      a_tower_y * c_tower_x +
-                      b_tower_y * c_tower_x +
-                      a_tower_x * g_tower_y;
-}
 
 // Return true if the specified XY position is reachable by the print head reference point.
 bool ColinearTripteronKinematics::IsReachable(float x, float y, bool isCoordinated) const noexcept
 {
 	return fsquare(x) + fsquare(y) < printRadiusSquared;
+}
+
+
+// Return the initial Cartesian coordinates we assume after switching to this kinematics
+void ColinearTripteronKinematics::GetAssumedInitialPosition(size_t numAxes, float positions[]) const noexcept
+{
+	for (size_t i = 0; i < numAxes; ++i)
+	{
+		positions[i] = 0.0;
+	}
+	positions[Z_AXIS] = homedHeight;
 }
