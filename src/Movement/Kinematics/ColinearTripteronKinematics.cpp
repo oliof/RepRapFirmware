@@ -189,3 +189,15 @@ void ColinearTripteronKinematics::LimitSpeedAndAcceleration(DDA& dda, const floa
 		dda.LimitSpeedAndAcceleration(maxSpeed/xyFactor, maxAcceleration/xyFactor);
 	}
 }
+
+/* 
+ *  # TODO
+ *  ## Must
+ *  - Object Model
+ *  - LimitPosition()
+ *  - CartesianToMotorSteps()
+ *  - MotorStepsToCartesian()
+ *  ## Should
+ *  - EndStop Adjustment
+ *  - Tower Tilt
+ */
