@@ -35,10 +35,6 @@ public:
 		AxesBitmap MustBeHomedAxes(AxesBitmap axesMoving, bool disallowMovesBeforeHoming) const noexcept override;
 		void LimitSpeedAndAcceleration(DDA& dda, const float *normalisedDirectionVector, size_t numVisibleAxes, bool continuousRotationShortcut) const noexcept override;
 
-	#if HAS_MASS_STORAGE
-		bool WriteResumeSettings(FileStore *f) const noexcept override;
-	#endif
-
 protected:
 	DECLARE_OBJECT_MODEL
 
