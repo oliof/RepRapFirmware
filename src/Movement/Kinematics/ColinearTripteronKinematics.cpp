@@ -69,16 +69,16 @@ bool ColinearTripteronKinematics::Configure(unsigned int mCode, GCodeBuffer& gb,
 	if (mcode = 669)
 	{
 		bool seen = false;
-                gb.TryGetFValue('A', armAngle, seen);
-                gb.TryGetFValue('R', printRadius, seen);
-                gb.TryGetFValue('H', homedHeight, seen);
-                if (gb.Seen('T')
+        gb.TryGetFValue('A', armAngle, seen);
+        gb.TryGetFValue('R', printRadius, seen);
+        gb.TryGetFValue('H', homedHeight, seen);
+        if (gb.Seen('T')
 		{
 			seen = true;
 			float towerRotations[3];
-                        size_t numTowerRotations = 3;
+            size_t numTowerRotations = 3;
 			gb.GetFloatArray(towerRotations, numTowerRotations, false);
-                        if(numTowerRotations == 3)
+            if(numTowerRotations == 3)
 			{
 				aTowerRotation = towerRotations[0];
 				bTowerRotation = towerRotations[1];
