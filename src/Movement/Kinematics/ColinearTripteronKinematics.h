@@ -41,7 +41,6 @@ protected:
 private:
     void Init() noexcept;
     void Recalc() noexcept;
-	
     // colinear tripteron default values
 	// arm angle in degrees
 	static constexpr float DefaultArmAngle = 30;
@@ -61,12 +60,22 @@ private:
 	// core parameters
 	float armAngle;              // angle of the arms
 	float printRadius;           // printable radius
-	float homedHeight; 
+	float homedHeight;
+	float a_tower_rotation;
+	float b_tower_rotation;
+	float c_tower_rotation;
 
 	// derived parameters
 	float towerX[NumTowers];     // X position of every tower
 	float towerY[NumTowers];     // Y position of every tower
 	float printRadiusSquared;
 	float alwaysReachableHeight; 
+	float a_tower_x;
+	float a_tower_y;
+	float b_tower_x;
+	float b_tower_y;
+	float c_tower_x;
+	float c_tower_y;
+	float denominator;
 
 }

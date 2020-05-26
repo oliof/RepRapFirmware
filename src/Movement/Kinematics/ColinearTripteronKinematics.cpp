@@ -126,6 +126,65 @@ bool ColinearTripteronKinematics::Configure(unsigned int mCode, GCodeBuffer& gb,
 }
 
 
+bool CartesianToMotorSteps(const float machinePos[], const float stepsPerMm[], size_t numVisibleAxes, size_t numTotalAxes, int32_t motorPos[], bool isCoordinated) const noexcept override;
+{
+	 /* Inverse Kinematics
+     *
+     * 3x3 reduction coefficient matrix * 1x3 coordinate matrix
+     * [a_x -a_y 1]   [x]
+     * [b_x -b_y 1] * [y]
+     * [g_x -g_y 1]   [z]
+     */
+
+	// Store for cleaner equations
+	//   float a_x = this->a_x, a_y = this->a_y;
+    //   float b_x = this->b_x, b_y = this->b_y;
+    //   float g_x = this->g_x, g_y = this->g_y;
+
+    // actuator_mm[ALPHA_STEPPER] = a_x*cartesian_mm[X_AXIS] - a_y*cartesian_mm[Y_AXIS] + cartesian_mm[Z_AXIS];
+    // actuator_mm[BETA_STEPPER ] = b_x*cartesian_mm[X_AXIS] - b_y*cartesian_mm[Y_AXIS] + cartesian_mm[Z_AXIS];
+    // actuator_mm[GAMMA_STEPPER] = g_x*cartesian_mm[X_AXIS] - g_y*cartesian_mm[Y_AXIS] + cartesian_mm[Z_AXIS];
+
+	ok = true;
+    motor_pos[A_TOWER] = a_tower_x*machine_pos[X_AXIS] - a_tower_y*machine_pos[Y_AXIS]  + machine_pos[Z_AXIS];
+	motor_pos[B_TOWER] = b_tower_x*machine_pos[X_AXIS] - b_tower_y*machine_pos[Y_AXIS] + machine_pos[Z_AXIS];
+    motor_pos[C_TOWER] = c_tower_x*machine_pos[X_AXIS] - c_tower_y*machine_pos[Y_AXIS] + machine_pos[Z_AXIS];
+	return ok;
+}
+
+
+void MotorStepsToCartesian(const int32_t motorPos[], const float stepsPerMm[], size_t numVisibleAxes, size_t numTotalAxes, float machinePos[]) const noexcept
+{
+	 /* Forward Kinematics
+     *
+     * 3x3 inverted reduction coefficient matrix * 1x3 actuator matrix
+     * [a_x -a_y 1]      [a]
+     * [b_x -b_y 1]^-1 * [b]
+     * [g_x -g_y 1]      [g]
+     */
+
+    // Store for cleaner equations
+    // float a_x = this->a_x, a_y = this->a_y;
+    // float b_x = this->b_x, b_y = this->b_y;
+    // float g_x = this->g_x, g_y = this->g_y;
+    // float d = this->d;
+
+    // cartesian_mm[X_AXIS] = (actuator_mm[ALPHA_STEPPER]*(g_y-b_y) + actuator_mm[BETA_STEPPER]*(a_y-g_y) + actuator_mm[GAMMA_STEPPER]*(b_y-a_y))/d;
+    // cartesian_mm[Y_AXIS] = (actuator_mm[ALPHA_STEPPER]*(g_x-b_x) + actuator_mm[BETA_STEPPER]*(a_x-g_x) + actuator_mm[GAMMA_STEPPER]*(b_x-a_x))/d;
+    // cartesian_mm[Z_AXIS] = (actuator_mm[ALPHA_STEPPER]*(b_y*g_x-b_x*g_y) + actuator_mm[BETA_STEPPER]*(a_x*g_y-a_y*g_x) + actuator_mm[GAMMA_STEPPER]*(a_y*b_x-a_x*b_y))/d;
+    machine_pos[X_AXIS] = (motor_pos[A_TOWER]*(c_tower_y-b_tower_y) +
+	                       motor_pos[B_TOWER]*(a_tower_y-c_tower_y) +
+						   motor_pos[C_TOWER]*(b_tower_y-a_tower_y)) / denominator;
+	machine_pos[Y_AXIS] = (motor_pos[A_TOWER]*(c_tower_x-b_tower_x) +
+	                       motor_pos[B_TOWER]*(a_tower_x-c_tower_x) +
+						   motor_pos[C_TOWER]*(b_tower_x-a_tower_y)) / denominator;
+	machine_pos[Z_AXIS] = (motor_pos[A_TOWER]*(b_tower_y*c_tower_x-b_tower_x*c_tower_y) +
+	                       motor_pos[B_TOWER]*(a_tower_x*c_tower_y-a_tower_y*c_tower_x) +
+						   motor_pos[C_TOWER]*(a_tower_y*b_tower_x-a_towerx*b_tower_y)) / denominator;
+}
+
+
+
 // Return true if the specified XY position is reachable by the print head reference point.
 bool ColinearTripteronKinematics::IsReachable(float x, float y, bool isCoordinated) const noexcept
 {
