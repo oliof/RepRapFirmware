@@ -15,6 +15,33 @@
 
 #define PIOVER180 0.01745329251994329576923690768489F
 
+#if SUPPORT_OBJECT_MODEL
+
+// Object model table and functions
+// Note: if using GCC version 7.3.1 20180622 and lambda functions are used in this table, you must compile this file with option -std=gnu++17.
+// Otherwise the table will be allocated in RAM instead of flash, which wastes too much RAM.
+
+// Macro to build a standard lambda function that includes the necessary type conversions
+#define OBJECT_MODEL_FUNC(...) OBJECT_MODEL_FUNC_BODY(ColinearTripteronKinematics, __VA_ARGS__)
+
+constexpr ObjectModelTableEntry PolarKinematics::objectModelTable[] =
+{
+	// Within each group, these entries must be in alphabetical order
+	// 0. kinematics members
+	{ "name",	OBJECT_MODEL_FUNC(self->GetName(true)), 	ObjectModelEntryFlags::none },
+};
+
+constexpr uint8_t ColinearTripteronKinematics::objectModelTableDescriptor[] = { 1, 1 };
+
+DEFINE_GET_OBJECT_MODEL_TABLE(ColinearTripteronKinematics)
+
+#endif
+
+// TODO: hwa ensure this is working (-:
+ColinearTripteronKinematics::ColinearTripteronKinematics() noexcept : Kinematics(KinematicsType::colinearTripteron)
+{
+	Init();
+}
 
 // Return the name of the current kinematics
 const char *ColinearTripteronKinematics::GetName(bool forStatusReport) const noexcept
@@ -31,8 +58,9 @@ void ColinearTripteronKinematics::Init() const noexcept
 	cTowerRotation = DefaultCTowerRotation;
 	printRadius    = DefaultPrintRadius;
 	homedHeight    = DefaultHomedHeight;
+	numTowers      = NumTowers;
 
-        Recalc();
+     Recalc();
 }
 
 
@@ -59,6 +87,10 @@ void ColinearTripteronKinematics::Recalc()
                   a_tower_y * c_tower_x +
                   b_tower_y * c_tower_x +
                   a_tower_x * c_tower_y;
+
+	printRadiusSquared = fsquare(printRadius);
+	alwaysReachableHeight = homedHeight; // naive approach for now.
+
 }
 
 
@@ -86,6 +118,10 @@ bool ColinearTripteronKinematics::Configure(unsigned int mCode, GCodeBuffer& gb,
 			}
 		} 
         return seen;
+	}
+	else
+	{
+		return Kinematics::Configure(mCode, gb, reply, error);
 	}
 }
 
