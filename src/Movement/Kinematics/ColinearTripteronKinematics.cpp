@@ -107,6 +107,7 @@ void ColinearTripteronKinematics::GetAssumedInitialPosition(size_t numAxes, floa
 	positions[Z_AXIS] = homedHeight;
 }
 
+
 // This function is called when a request is made to home the axes in 'toBeHomed' and the axes in 'alreadyHomed' have already been homed.
 // If we can proceed with homing some axes, return the name of the homing file to be called.
 // If we can't proceed because other axes need to be homed first, return nullptr and pass those axes back in 'mustBeHomedFirst'.
@@ -122,12 +123,14 @@ AxesBitmap ColinearTripteronKinematics::GetHomingFileName(AxesBitmap toBeHomed, 
 	return Kinematics::GetHomingFileName(toBeHomed, alreadyHomed, numVisibleAxes, filename);
 }
 
+
 // This function is called from the step ISR when an endstop switch is triggered during homing.
 // Return true if the entire homing move should be terminated, false if only the motor associated with the endstop switch should be stopped.
 bool ColinearTripteronKinematics::QueryTerminateHomingMove(size_t axis) const noexcept
 {
 	return false;
 }
+
 
 // This function is called from the step ISR when an endstop switch is triggered during homing after stopping just one motor or all motors.
 // Take the action needed to define the current position, normally by calling dda.SetDriveCoordinate().
@@ -147,6 +150,30 @@ void ColinearTripteronKinematics::OnHomingSwitchTriggered(size_t axis, bool high
 		dda.SetDriveCoordinate(lrintf(hitPoint * stepsPerMm[axis]), axis);
 	}
 }
+
+
+// Return the axes that we can assume are homed after executing a G92 command to set the specified axis coordinates
+AxesBitmap ColinearTripteronKinematics::AxesAssumedHomed(AxesBitmap g92Axes) const noexcept
+{
+	// If all of X, Y and Z have been specified then we know the positions of all 3 tower motors, otherwise we don't
+	if ((g92Axes & XyzAxes) != XyzAxes)
+	{
+		g92Axes &= ~XyzAxes;
+	}
+	return g92Axes;
+}
+
+
+// Return the set of axes that must be homed prior to regular movement of the specified axes
+AxesBitmap LinearDeltaKinematics::MustBeHomedAxes(AxesBitmap axesMoving, bool disallowMovesBeforeHoming) const noexcept
+{
+	if (axesMoving.Intersects(XyzAxes))
+	{
+		axesMoving |= XyzAxes;
+	}
+	return axesMoving;
+}
+
 
 // Limit the speed and acceleration of a move to values that the mechanics can handle.
 // The speeds in Cartesian space have already been limited.
