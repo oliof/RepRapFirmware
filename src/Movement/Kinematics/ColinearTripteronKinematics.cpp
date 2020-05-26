@@ -146,7 +146,7 @@ bool CartesianToMotorSteps(const float machinePos[], const float stepsPerMm[], s
     // actuator_mm[GAMMA_STEPPER] = g_x*cartesian_mm[X_AXIS] - g_y*cartesian_mm[Y_AXIS] + cartesian_mm[Z_AXIS];
 
 	ok = true;
-    motor_pos[A_TOWER] = a_tower_x*machine_pos[X_AXIS] - a_tower_y*machine_pos[Y_AXIS]  + machine_pos[Z_AXIS];
+    motor_pos[A_TOWER] = a_tower_x*machine_pos[X_AXIS] - a_tower_y*machine_pos[Y_AXIS] + machine_pos[Z_AXIS];
 	motor_pos[B_TOWER] = b_tower_x*machine_pos[X_AXIS] - b_tower_y*machine_pos[Y_AXIS] + machine_pos[Z_AXIS];
     motor_pos[C_TOWER] = c_tower_x*machine_pos[X_AXIS] - c_tower_y*machine_pos[Y_AXIS] + machine_pos[Z_AXIS];
 	return ok;
