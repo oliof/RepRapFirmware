@@ -85,3 +85,9 @@ void ColinearTripteronKinematics::Recalc()
                       b_tower_y * c_tower_x +
                       a_tower_x * g_tower_y;
 }
+
+// Return true if the specified XY position is reachable by the print head reference point.
+bool ColinearTripteronKinematics::IsReachable(float x, float y, bool isCoordinated) const noexcept
+{
+	return fsquare(x) + fsquare(y) < printRadiusSquared;
+}

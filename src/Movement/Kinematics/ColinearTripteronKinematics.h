@@ -1,15 +1,14 @@
 /*
  * ColinearTripteronKinematics.h
  *
- *  Created on: 24 May 2020
- *      Author: oliof, apsu
+ * Created on: 24 May 2020
+ *    Authors: oliof, apsu
  *
  */
 
 #ifndef SRC_MOVEMENT_KINEMATICS_COLINEARTRIPTERONKINEMATICS_H_
 #define SRC_MOVEMENT_KINEMATICS_COLINEARTRIPTERONKINEMATICS_H_
 
-#include "RepRapFirmware.h"
 #include "Kinematics.h"
 
 class ColinearTripteronKinematics: public Kinematics
@@ -35,15 +34,10 @@ public:
     	AxesBitmap AxesAssumedHomed(AxesBitmap g92Axes) const noexcept override;
 		AxesBitmap MustBeHomedAxes(AxesBitmap axesMoving, bool disallowMovesBeforeHoming) const noexcept override;
 		void LimitSpeedAndAcceleration(DDA& dda, const float *normalisedDirectionVector, size_t numVisibleAxes, bool continuousRotationShortcut) const noexcept override;
-	    
-
 
 	#if HAS_MASS_STORAGE
 		bool WriteResumeSettings(FileStore *f) const noexcept override;
 	#endif
-        
-
-
 
 protected:
 	DECLARE_OBJECT_MODEL
