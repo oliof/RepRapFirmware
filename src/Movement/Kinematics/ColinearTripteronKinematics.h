@@ -34,7 +34,7 @@ public:
     	AxesBitmap AxesAssumedHomed(AxesBitmap g92Axes) const noexcept override;
 		AxesBitmap MustBeHomedAxes(AxesBitmap axesMoving, bool disallowMovesBeforeHoming) const noexcept override;
 		void LimitSpeedAndAcceleration(DDA& dda, const float *normalisedDirectionVector, size_t numVisibleAxes, bool continuousRotationShortcut) const noexcept override;
-
+                AxesBitmap GetLinearAxes() const noexcept override;
 protected:
 	DECLARE_OBJECT_MODEL
 
@@ -61,9 +61,10 @@ private:
 	float armAngle;              // angle of the arms
 	float printRadius;           // printable radius
 	float homedHeight;
-	float a_tower_rotation;
-	float b_tower_rotation;
-	float c_tower_rotation;
+	size_t numTowers;
+	float aTowerRotation;
+	float bTowerRotation;
+	float cTowerRotation;
 
 	// derived parameters
 	float towerX[NumTowers];     // X position of every tower
@@ -78,4 +79,6 @@ private:
 	float c_tower_y;
 	float denominator;
 
-}
+};
+
+#endif // SRC_MOVEMENT_KINEMATICS_COLINEARTRIPTERONKINEMATICS_H_

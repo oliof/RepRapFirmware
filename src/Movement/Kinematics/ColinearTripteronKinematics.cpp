@@ -6,6 +6,7 @@
  *
  */
 
+#include "Movement/Move.h"
 #include "ColinearTripteronKinematics.h"
 #include "RepRap.h"
 #include "Platform.h"
@@ -24,7 +25,7 @@
 // Macro to build a standard lambda function that includes the necessary type conversions
 #define OBJECT_MODEL_FUNC(...) OBJECT_MODEL_FUNC_BODY(ColinearTripteronKinematics, __VA_ARGS__)
 
-constexpr ObjectModelTableEntry PolarKinematics::objectModelTable[] =
+constexpr ObjectModelTableEntry ColinearTripteronKinematics::objectModelTable[] =
 {
 	// Within each group, these entries must be in alphabetical order
 	// 0. kinematics members
@@ -37,8 +38,8 @@ DEFINE_GET_OBJECT_MODEL_TABLE(ColinearTripteronKinematics)
 
 #endif
 
-// TODO: hwa ensure this is working (-:
-ColinearTripteronKinematics::ColinearTripteronKinematics() noexcept : Kinematics(KinematicsType::colinearTripteron)
+
+ColinearTripteronKinematics::ColinearTripteronKinematics() noexcept : Kinematics(KinematicsType::colinearTripteron, 0.0, 0, true ), numTowers(NumTowers)
 {
 	Init();
 }
@@ -50,29 +51,29 @@ const char *ColinearTripteronKinematics::GetName(bool forStatusReport) const noe
 }
 
 
-void ColinearTripteronKinematics::Init() const noexcept
+void ColinearTripteronKinematics::Init() noexcept
 {
-	armAngle = DefaultArmAngle;
-	aTowerRotation = DefaultATowerRotation;
-	bTowerRotation = DefaultBTowerRotation;
-	cTowerRotation = DefaultCTowerRotation;
-	printRadius    = DefaultPrintRadius;
-	homedHeight    = DefaultHomedHeight;
+	this->armAngle       = DefaultArmAngle;
+	this->aTowerRotation = DefaultATowerRotation;
+	this->bTowerRotation = DefaultBTowerRotation;
+	this->cTowerRotation = DefaultCTowerRotation;
+	this->printRadius    = DefaultPrintRadius;
+	this->homedHeight    = DefaultHomedHeight;
 	numTowers      = NumTowers;
 
      Recalc();
 }
 
 
-void ColinearTripteronKinematics::Recalc()
+void ColinearTripteronKinematics::Recalc() noexcept
 {
 	// arm angle and tangent
-	arm_angle = PIOVER180*armAngle;
-	arm_angle_tan = tanf(arm_angle);
+	float arm_angle = PIOVER180*armAngle;
+	float arm_angle_tan = tanf(arm_angle);
 	// tower rotations
-	a_tower_rotation = PIOVER180*aTowerRotation;
-	b_tower_rotation = PIOVER180*bTowerRotation;
-	c_tower_rotation = PIOVER180*bTowerRotation;
+	float a_tower_rotation = PIOVER180*aTowerRotation;
+	float b_tower_rotation = PIOVER180*bTowerRotation;
+	float c_tower_rotation = PIOVER180*bTowerRotation;
     // tower reductions and tangent coefficients
 	a_tower_x = sinf(a_tower_rotation) * arm_angle_tan;
 	a_tower_y = cosf(a_tower_rotation) * arm_angle_tan;
@@ -97,13 +98,13 @@ bool ColinearTripteronKinematics::Configure(unsigned int mCode, GCodeBuffer& gb,
 {
 // M669 K12 A30 R120 H220 T0:120:240 
 
-	if (mcode = 669)
+	if (mCode == 669)
 	{
-		bool seen = false;
+	bool seen = false;
         gb.TryGetFValue('A', armAngle, seen);
         gb.TryGetFValue('R', printRadius, seen);
         gb.TryGetFValue('H', homedHeight, seen);
-        if (gb.Seen('T')
+        if (gb.Seen('T'))
 		{
 			seen = true;
 			float towerRotations[3];
@@ -117,7 +118,7 @@ bool ColinearTripteronKinematics::Configure(unsigned int mCode, GCodeBuffer& gb,
 			}
 		} 
 		Recalc();
-        return seen;
+		return seen;
 	}
 	else
 	{
@@ -126,7 +127,7 @@ bool ColinearTripteronKinematics::Configure(unsigned int mCode, GCodeBuffer& gb,
 }
 
 
-bool CartesianToMotorSteps(const float machinePos[], const float stepsPerMm[], size_t numVisibleAxes, size_t numTotalAxes, int32_t motorPos[], bool isCoordinated) const noexcept override;
+bool ColinearTripteronKinematics::CartesianToMotorSteps(const float machinePos[], const float stepsPerMm[], size_t numVisibleAxes, size_t numTotalAxes, int32_t motorPos[], bool isCoordinated) const noexcept 
 {
 	 /* Inverse Kinematics
      *
@@ -145,15 +146,15 @@ bool CartesianToMotorSteps(const float machinePos[], const float stepsPerMm[], s
     // actuator_mm[BETA_STEPPER ] = b_x*cartesian_mm[X_AXIS] - b_y*cartesian_mm[Y_AXIS] + cartesian_mm[Z_AXIS];
     // actuator_mm[GAMMA_STEPPER] = g_x*cartesian_mm[X_AXIS] - g_y*cartesian_mm[Y_AXIS] + cartesian_mm[Z_AXIS];
 
-	ok = true;
-    motor_pos[A_TOWER] = a_tower_x*machine_pos[X_AXIS] - a_tower_y*machine_pos[Y_AXIS] + machine_pos[Z_AXIS];
-	motor_pos[B_TOWER] = b_tower_x*machine_pos[X_AXIS] - b_tower_y*machine_pos[Y_AXIS] + machine_pos[Z_AXIS];
-    motor_pos[C_TOWER] = c_tower_x*machine_pos[X_AXIS] - c_tower_y*machine_pos[Y_AXIS] + machine_pos[Z_AXIS];
+	bool ok = true;
+        motorPos[A_TOWER] = a_tower_x*machinePos[X_AXIS] - a_tower_y*machinePos[Y_AXIS] + machinePos[Z_AXIS];
+	motorPos[B_TOWER] = b_tower_x*machinePos[X_AXIS] - b_tower_y*machinePos[Y_AXIS] + machinePos[Z_AXIS];
+        motorPos[C_TOWER] = c_tower_x*machinePos[X_AXIS] - c_tower_y*machinePos[Y_AXIS] + machinePos[Z_AXIS];
 	return ok;
 }
 
 
-void MotorStepsToCartesian(const int32_t motorPos[], const float stepsPerMm[], size_t numVisibleAxes, size_t numTotalAxes, float machinePos[]) const noexcept
+void ColinearTripteronKinematics::MotorStepsToCartesian(const int32_t motorPos[], const float stepsPerMm[], size_t numVisibleAxes, size_t numTotalAxes, float machinePos[]) const noexcept
 {
 	 /* Forward Kinematics
      *
@@ -172,15 +173,22 @@ void MotorStepsToCartesian(const int32_t motorPos[], const float stepsPerMm[], s
     // cartesian_mm[X_AXIS] = (actuator_mm[ALPHA_STEPPER]*(g_y-b_y) + actuator_mm[BETA_STEPPER]*(a_y-g_y) + actuator_mm[GAMMA_STEPPER]*(b_y-a_y))/d;
     // cartesian_mm[Y_AXIS] = (actuator_mm[ALPHA_STEPPER]*(g_x-b_x) + actuator_mm[BETA_STEPPER]*(a_x-g_x) + actuator_mm[GAMMA_STEPPER]*(b_x-a_x))/d;
     // cartesian_mm[Z_AXIS] = (actuator_mm[ALPHA_STEPPER]*(b_y*g_x-b_x*g_y) + actuator_mm[BETA_STEPPER]*(a_x*g_y-a_y*g_x) + actuator_mm[GAMMA_STEPPER]*(a_y*b_x-a_x*b_y))/d;
-    machine_pos[X_AXIS] = (motor_pos[A_TOWER]*(c_tower_y-b_tower_y) +
-	                       motor_pos[B_TOWER]*(a_tower_y-c_tower_y) +
-						   motor_pos[C_TOWER]*(b_tower_y-a_tower_y)) / denominator;
-	machine_pos[Y_AXIS] = (motor_pos[A_TOWER]*(c_tower_x-b_tower_x) +
-	                       motor_pos[B_TOWER]*(a_tower_x-c_tower_x) +
-						   motor_pos[C_TOWER]*(b_tower_x-a_tower_y)) / denominator;
-	machine_pos[Z_AXIS] = (motor_pos[A_TOWER]*(b_tower_y*c_tower_x-b_tower_x*c_tower_y) +
-	                       motor_pos[B_TOWER]*(a_tower_x*c_tower_y-a_tower_y*c_tower_x) +
-						   motor_pos[C_TOWER]*(a_tower_y*b_tower_x-a_towerx*b_tower_y)) / denominator;
+    // float a_tower_x = this->a_tower_x, a_tower_y = this->a_tower_y;
+    // float b_tower_x = this->b_tower_x, b_tower_y = this->b_tower_y;
+    // float c_tower_x = this->b_tower_x, c_tower_y = this->c_tower_y;
+
+
+
+
+    machinePos[X_AXIS] = (motorPos[A_TOWER]*(c_tower_y-b_tower_y) +
+	                       motorPos[B_TOWER]*(a_tower_y-c_tower_y) +
+						   motorPos[C_TOWER]*(b_tower_y-a_tower_y)) / denominator;
+	machinePos[Y_AXIS] = (motorPos[A_TOWER]*(c_tower_x-b_tower_x) +
+	                       motorPos[B_TOWER]*(a_tower_x-c_tower_x) +
+						   motorPos[C_TOWER]*(b_tower_x-a_tower_y)) / denominator;
+	machinePos[Z_AXIS] = (motorPos[A_TOWER]*(b_tower_y*c_tower_x-b_tower_x*c_tower_y) +
+	                       motorPos[B_TOWER]*(a_tower_x*c_tower_y-a_tower_y*c_tower_x) +
+						   motorPos[C_TOWER]*(a_tower_y*b_tower_x-a_tower_x*b_tower_y)) / denominator;
 }
 
 
@@ -193,7 +201,7 @@ bool ColinearTripteronKinematics::IsReachable(float x, float y, bool isCoordinat
 
 
 // Limit position if instructed to movr outside reachable area
-LimitPositionResult LimitPosition(float finalCoords[], const float * null initialCoords,
+LimitPositionResult ColinearTripteronKinematics::LimitPosition(float finalCoords[], const float * null initialCoords,
 												size_t numVisibleAxes, AxesBitmap axesHomed, bool isCoordinated, bool applyM208Limits) const noexcept
 {
 bool limited = false;
@@ -214,7 +222,7 @@ bool limited = false;
 		// Limit move to not go beyond Z axis maximum.
 		// TODO hwa: find formula to get Z max limited by arm positions, the below will only stop too late!
 
-		if (applyM208Limits && finalCoords[Z_AXis] > reprap.GetPlatform().AxisMaximum(Z_AXIS))
+		if (applyM208Limits && finalCoords[Z_AXIS] > reprap.GetPlatform().AxisMaximum(Z_AXIS))
 		{
 			finalCoords[Z_AXIS] = reprap.GetPlatform().AxisMaximum(Z_AXIS);
 			limited = true;
@@ -229,13 +237,12 @@ bool limited = false;
 	}
 
 	// Limit any additional axes according to the M208 limits
-	if (applyM208Limits && LimitPositionFromAxis(finalCoords, numTowers, numVisibleAxes, axesHomed))
+	if (applyM208Limits && Kinematics::LimitPositionFromAxis(finalCoords, numTowers, numVisibleAxes, axesHomed))
 	{
 		limited = true;
 	}
 
 	return (limited) ? LimitPositionResult::adjusted : LimitPositionResult::ok;
-	}
 }
 
 
@@ -282,7 +289,7 @@ void ColinearTripteronKinematics::OnHomingSwitchTriggered(size_t axis, bool high
 	{
 		if (highEnd)
 		{
-			dda.SetDriveCoordinate(	(homedCarriageHeights[axis] * stepsPerMm[axis]), axis);
+			dda.SetDriveCoordinate(	(homedHeight * stepsPerMm[axis]), axis);
 		}
 	}
 	else
@@ -307,7 +314,7 @@ AxesBitmap ColinearTripteronKinematics::AxesAssumedHomed(AxesBitmap g92Axes) con
 
 
 // Return the set of axes that must be homed prior to regular movement of the specified axes
-AxesBitmap LinearDeltaKinematics::MustBeHomedAxes(AxesBitmap axesMoving, bool disallowMovesBeforeHoming) const noexcept
+AxesBitmap ColinearTripteronKinematics::MustBeHomedAxes(AxesBitmap axesMoving, bool disallowMovesBeforeHoming) const noexcept
 {
 	if (axesMoving.Intersects(XyzAxes))
 	{
@@ -332,13 +339,17 @@ void ColinearTripteronKinematics::LimitSpeedAndAcceleration(DDA& dda, const floa
 	}
 }
 
-/* 
+AxesBitmap ColinearTripteronKinematics::GetLinearAxes() const noexcept
+{
+	        return AxesBitmap::MakeFromBits(Z_AXIS);
+}
+
+/*
  *  # TODO
  *  ## Must
  *  - LimitPosition() "done"
- *  - CartesianToMotorSteps()
- *  - MotorStepsToCartesian()
  *  ## Should
  *  - EndStop Adjustment
  *  - Tower Tilt?
+ *
  */
