@@ -90,7 +90,6 @@ void ColinearTripteronKinematics::Recalc()
 
 	printRadiusSquared = fsquare(printRadius);
 	alwaysReachableHeight = homedHeight; // naive approach for now.
-
 }
 
 
@@ -117,6 +116,7 @@ bool ColinearTripteronKinematics::Configure(unsigned int mCode, GCodeBuffer& gb,
 				cTowerRotation = towerRotations[2];
 			}
 		} 
+		Recalc();
         return seen;
 	}
 	else
@@ -130,6 +130,53 @@ bool ColinearTripteronKinematics::Configure(unsigned int mCode, GCodeBuffer& gb,
 bool ColinearTripteronKinematics::IsReachable(float x, float y, bool isCoordinated) const noexcept
 {
 	return fsquare(x) + fsquare(y) < printRadiusSquared;
+}
+
+
+// Limit position if instructed to movr outside reachable area
+LimitPositionResult LimitPosition(float finalCoords[], const float * null initialCoords,
+												size_t numVisibleAxes, AxesBitmap axesHomed, bool isCoordinated, bool applyM208Limits) const noexcept
+{
+bool limited = false;
+
+	// If axes have been homed on a colinear tripteron printer and this isn't a homing move, check for movements outside limits.
+	// Skip this check if axes have not been homed, so that extruder-only moves are allowed before homing
+	if ((axesHomed & XyzAxes) == XyzAxes)
+	{
+		// Constrain the move to be within the build radius
+		const float diagonalSquared = fsquare(finalCoords[X_AXIS]) + fsquare(finalCoords[Y_AXIS]);
+		if (applyM208Limits && diagonalSquared > printRadiusSquared)
+		{
+			const float factor = sqrtf(printRadiusSquared / diagonalSquared);
+			finalCoords[X_AXIS] *= factor;
+			finalCoords[Y_AXIS] *= factor;
+			limited = true;
+		}
+		// Limit move to not go beyond Z axis maximum.
+		// TODO hwa: find formula to get Z max limited by arm positions, the below will only stop too late!
+
+		if (applyM208Limits && finalCoords[Z_AXis] > reprap.GetPlatform().AxisMaximum(Z_AXIS))
+		{
+			finalCoords[Z_AXIS] = reprap.GetPlatform().AxisMaximum(Z_AXIS);
+			limited = true;
+		}
+
+		// Limit move to not go beyond Z axis minimum.
+		if (applyM208Limits && finalCoords[Z_AXIS] < reprap.GetPlatform().AxisMinimum(Z_AXIS))
+		{
+			finalCoords[Z_AXIS] = reprap.GetPlatform().AxisMinimum(Z_AXIS);
+			limited = true;
+		}
+	}
+
+	// Limit any additional axes according to the M208 limits
+	if (applyM208Limits && LimitPositionFromAxis(finalCoords, numTowers, numVisibleAxes, axesHomed))
+	{
+		limited = true;
+	}
+
+	return (limited) ? LimitPositionResult::adjusted : LimitPositionResult::ok;
+	}
 }
 
 
@@ -176,7 +223,7 @@ void ColinearTripteronKinematics::OnHomingSwitchTriggered(size_t axis, bool high
 	{
 		if (highEnd)
 		{
-			dda.SetDriveCoordinate(lrintf(homedCarriageHeights[axis] * stepsPerMm[axis]), axis);
+			dda.SetDriveCoordinate(	(homedCarriageHeights[axis] * stepsPerMm[axis]), axis);
 		}
 	}
 	else
@@ -229,11 +276,10 @@ void ColinearTripteronKinematics::LimitSpeedAndAcceleration(DDA& dda, const floa
 /* 
  *  # TODO
  *  ## Must
- *  - Object Model
- *  - LimitPosition()
+ *  - LimitPosition() "done"
  *  - CartesianToMotorSteps()
  *  - MotorStepsToCartesian()
  *  ## Should
  *  - EndStop Adjustment
- *  - Tower Tilt
+ *  - Tower Tilt?
  */
