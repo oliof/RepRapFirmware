@@ -45,20 +45,20 @@ void ColinearTripteronKinematics::Recalc()
 	a_tower_rotation = PIOVER180*aTowerRotation;
 	b_tower_rotation = PIOVER180*bTowerRotation;
 	c_tower_rotation = PIOVER180*bTowerRotation;
-        // tower reductions and tangent coefficients
+    // tower reductions and tangent coefficients
 	a_tower_x = sinf(a_tower_rotation) * arm_angle_tan;
 	a_tower_y = cosf(a_tower_rotation) * arm_angle_tan;
 	b_tower_x = sinf(b_tower_rotation) * arm_angle_tan;
 	b_tower_x = cosf(b_tower_rotation) * arm_angle_tan;
 	c_tower_x = sinf(c_tower_rotation) * arm_angle_tan;
 	c_tower_x = cosf(c_tower_rotation) * arm_angle_tan;
-        // forward kinematics matrix denominator
-        denominator = a_tower_y * b_tower_x -
-                      c_tower_y * b_tower_x -
-                      a_tower_y * b_tower_y -
-                      a_tower_y * c_tower_x +
-                      b_tower_y * c_tower_x +
-                      a_tower_x * g_tower_y;
+    // forward kinematics matrix denominator
+    denominator = a_tower_y * b_tower_x -
+                  c_tower_y * b_tower_x -
+                  a_tower_y * b_tower_y -
+                  a_tower_y * c_tower_x +
+                  b_tower_y * c_tower_x +
+                  a_tower_x * c_tower_y;
 }
 
 
