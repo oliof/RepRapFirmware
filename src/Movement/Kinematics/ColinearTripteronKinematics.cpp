@@ -122,3 +122,29 @@ AxesBitmap ColinearTripteronKinematics::GetHomingFileName(AxesBitmap toBeHomed, 
 
 	return Kinematics::GetHomingFileName(toBeHomed, alreadyHomed, numVisibleAxes, filename);
 }
+
+// This function is called from the step ISR when an endstop switch is triggered during homing.
+// Return true if the entire homing move should be terminated, false if only the motor associated with the endstop switch should be stopped.
+bool ColinearTripteronKinematics::QueryTerminateHomingMove(size_t axis) const noexcept
+{
+	return false;
+}
+
+// This function is called from the step ISR when an endstop switch is triggered during homing after stopping just one motor or all motors.
+// Take the action needed to define the current position, normally by calling dda.SetDriveCoordinate().
+void ColinearTripteronKinematics::OnHomingSwitchTriggered(size_t axis, bool highEnd, const float stepsPerMm[], DDA& dda) const noexcept
+{
+	if (axis < numTowers)
+	{
+		if (highEnd)
+		{
+			dda.SetDriveCoordinate(lrintf(homedCarriageHeights[axis] * stepsPerMm[axis]), axis);
+		}
+	}
+	else
+	{
+		// Assume that any additional axes are linear
+		const float hitPoint = (highEnd) ? reprap.GetPlatform().AxisMaximum(axis) : reprap.GetPlatform().AxisMinimum(axis);
+		dda.SetDriveCoordinate(lrintf(hitPoint * stepsPerMm[axis]), axis);
+	}
+}
