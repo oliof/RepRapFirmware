@@ -14,7 +14,7 @@
 #include "HangprinterKinematics.h"
 #include "PolarKinematics.h"
 #include "FiveBarScaraKinematics.h"
-#include "ColinearTripteron.h"
+#include "ColinearTripteronKinematics.h"
 
 #include "RepRap.h"
 #include "Platform.h"
