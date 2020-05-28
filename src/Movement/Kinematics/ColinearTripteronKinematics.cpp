@@ -53,12 +53,12 @@ const char *ColinearTripteronKinematics::GetName(bool forStatusReport) const noe
 
 void ColinearTripteronKinematics::Init() noexcept
 {
-	this->armAngle       = DefaultArmAngle;
-	this->aTowerRotation = DefaultATowerRotation;
-	this->bTowerRotation = DefaultBTowerRotation;
-	this->cTowerRotation = DefaultCTowerRotation;
-	this->printRadius    = DefaultPrintRadius;
-	this->homedHeight    = DefaultHomedHeight;
+	armAngle       = DefaultArmAngle;
+	aTowerRotation = DefaultATowerRotation;
+	bTowerRotation = DefaultBTowerRotation;
+	cTowerRotation = DefaultCTowerRotation;
+	printRadius    = DefaultPrintRadius;
+	homedHeight    = DefaultHomedHeight;
 	numTowers      = NumTowers;
 
      Recalc();
@@ -68,27 +68,21 @@ void ColinearTripteronKinematics::Init() noexcept
 void ColinearTripteronKinematics::Recalc() noexcept
 {
 	// arm angle and tangent
-	float arm_angle = PIOVER180*armAngle;
-	float arm_angle_tan = tanf(arm_angle);
+	float arm_angle_tan = tanf(PIOVER180*armAngle);
 	// tower rotations
-	float a_tower_rotation = PIOVER180*aTowerRotation;
-	float b_tower_rotation = PIOVER180*bTowerRotation;
-	float c_tower_rotation = PIOVER180*bTowerRotation;
+	float a_rotation = PIOVER180*aTowerRotation;
+	float b_rotation = PIOVER180*bTowerRotation;
+	float c_rotation = PIOVER180*cTowerRotation;
     // tower reductions and tangent coefficients
-	a_tower_x = sinf(a_tower_rotation) * arm_angle_tan;
-	a_tower_y = cosf(a_tower_rotation) * arm_angle_tan;
-	b_tower_x = sinf(b_tower_rotation) * arm_angle_tan;
-	b_tower_x = cosf(b_tower_rotation) * arm_angle_tan;
-	c_tower_x = sinf(c_tower_rotation) * arm_angle_tan;
-	c_tower_x = cosf(c_tower_rotation) * arm_angle_tan;
+	a_x = sinf(a_rotation) * arm_angle_tan;
+	a_y = cosf(a_rotation) * arm_angle_tan;
+	b_x = sinf(b_rotation) * arm_angle_tan;
+	b_y = cosf(b_rotation) * arm_angle_tan;
+	c_x = sinf(c_rotation) * arm_angle_tan;
+	c_y = cosf(c_rotation) * arm_angle_tan;
     // forward kinematics matrix denominator
-    denominator = a_tower_y * b_tower_x -
-                  c_tower_y * b_tower_x -
-                  a_tower_y * b_tower_y -
-                  a_tower_y * c_tower_x +
-                  b_tower_y * c_tower_x +
-                  a_tower_x * c_tower_y;
-
+    //     d = a_y*b_x - g_y*b_x - a_x*b_y - a_y*g_x + b_y*g_x + a_x*g_y;
+    denominator = a_y * b_x - c_y * b_x - a_x * b_y - a_y * c_x + b_y * c_x + a_x * c_y;
 	printRadiusSquared = fsquare(printRadius);
 	alwaysReachableHeight = homedHeight; // naive approach for now.
 }
@@ -98,32 +92,32 @@ bool ColinearTripteronKinematics::Configure(unsigned int mCode, GCodeBuffer& gb,
 {
 // M669 K12 A30 R120 H220 T0:120:240 
 
-	if (mCode == 669)
-	{
-	bool seen = false;
+    if (mCode == 669)
+    {
+        bool seen = false;
         gb.TryGetFValue('A', armAngle, seen);
         gb.TryGetFValue('R', printRadius, seen);
         gb.TryGetFValue('H', homedHeight, seen);
         if (gb.Seen('T'))
-		{
-			seen = true;
-			float towerRotations[3];
-            size_t numTowerRotations = 3;
-			gb.GetFloatArray(towerRotations, numTowerRotations, false);
-            if(numTowerRotations == 3)
-			{
-				aTowerRotation = towerRotations[0];
-				bTowerRotation = towerRotations[1];
-				cTowerRotation = towerRotations[2];
-			}
-		} 
-		Recalc();
-		return seen;
-	}
-	else
 	{
-		return Kinematics::Configure(mCode, gb, reply, error);
-	}
+            seen = true;
+	    float towerRotations[3];
+            size_t numTowerRotations = 3;
+   	    gb.GetFloatArray(towerRotations, numTowerRotations, false);
+            if(numTowerRotations == 3)
+	    {
+		aTowerRotation = towerRotations[0];
+		bTowerRotation = towerRotations[1];
+		cTowerRotation = towerRotations[2];
+            }
+	} 
+	Recalc();
+        return seen;
+    }	
+    else
+    {
+        return Kinematics::Configure(mCode, gb, reply, error);
+    }
 }
 
 
@@ -147,9 +141,9 @@ bool ColinearTripteronKinematics::CartesianToMotorSteps(const float machinePos[]
     // actuator_mm[GAMMA_STEPPER] = g_x*cartesian_mm[X_AXIS] - g_y*cartesian_mm[Y_AXIS] + cartesian_mm[Z_AXIS];
 
 	bool ok = true;
-        motorPos[A_TOWER] = a_tower_x*machinePos[X_AXIS] - a_tower_y*machinePos[Y_AXIS] + machinePos[Z_AXIS];
-	motorPos[B_TOWER] = b_tower_x*machinePos[X_AXIS] - b_tower_y*machinePos[Y_AXIS] + machinePos[Z_AXIS];
-        motorPos[C_TOWER] = c_tower_x*machinePos[X_AXIS] - c_tower_y*machinePos[Y_AXIS] + machinePos[Z_AXIS];
+        motorPos[A_TOWER] = a_x*machinePos[X_AXIS] - a_y*machinePos[Y_AXIS] + machinePos[Z_AXIS];
+	motorPos[B_TOWER] = b_x*machinePos[X_AXIS] - b_y*machinePos[Y_AXIS] + machinePos[Z_AXIS];
+        motorPos[C_TOWER] = c_x*machinePos[X_AXIS] - c_y*machinePos[Y_AXIS] + machinePos[Z_AXIS];
 	return ok;
 }
 
@@ -177,18 +171,9 @@ void ColinearTripteronKinematics::MotorStepsToCartesian(const int32_t motorPos[]
     // float b_tower_x = this->b_tower_x, b_tower_y = this->b_tower_y;
     // float c_tower_x = this->b_tower_x, c_tower_y = this->c_tower_y;
 
-
-
-
-    machinePos[X_AXIS] = (motorPos[A_TOWER]*(c_tower_y-b_tower_y) +
-	                       motorPos[B_TOWER]*(a_tower_y-c_tower_y) +
-						   motorPos[C_TOWER]*(b_tower_y-a_tower_y)) / denominator;
-	machinePos[Y_AXIS] = (motorPos[A_TOWER]*(c_tower_x-b_tower_x) +
-	                       motorPos[B_TOWER]*(a_tower_x-c_tower_x) +
-						   motorPos[C_TOWER]*(b_tower_x-a_tower_y)) / denominator;
-	machinePos[Z_AXIS] = (motorPos[A_TOWER]*(b_tower_y*c_tower_x-b_tower_x*c_tower_y) +
-	                       motorPos[B_TOWER]*(a_tower_x*c_tower_y-a_tower_y*c_tower_x) +
-						   motorPos[C_TOWER]*(a_tower_y*b_tower_x-a_tower_x*b_tower_y)) / denominator;
+    machinePos[X_AXIS] = (motorPos[A_TOWER]*(c_y-b_y) + motorPos[B_TOWER]*(a_y-c_y) + motorPos[C_TOWER]*(b_y-a_y)) / denominator;
+    machinePos[Y_AXIS] = (motorPos[A_TOWER]*(c_x-b_x) + motorPos[B_TOWER]*(a_x-c_x) + motorPos[C_TOWER]*(b_x-a_x)) / denominator;
+    machinePos[Z_AXIS] = (motorPos[A_TOWER]*(b_y*c_x-b_x*c_y) + motorPos[B_TOWER]*(a_x*c_y-a_y*c_x) + motorPos[C_TOWER]*(a_y*b_x-a_x*b_y)) / denominator;
 }
 
 
@@ -253,7 +238,7 @@ void ColinearTripteronKinematics::GetAssumedInitialPosition(size_t numAxes, floa
 	{
 		positions[i] = 0.0;
 	}
-	positions[Z_AXIS] = homedHeight;
+	positions[Z_AXIS] = 9;
 }
 
 
