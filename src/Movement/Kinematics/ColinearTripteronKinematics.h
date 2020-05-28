@@ -26,7 +26,7 @@ public:
 												size_t numVisibleAxes, AxesBitmap axesHomed, bool isCoordinated, bool applyM208Limits) const noexcept override;
 		AxesBitmap AxesToHomeBeforeProbing() const noexcept { return XyzAxes; }
 		void GetAssumedInitialPosition(size_t numAxes, float positions[]) const noexcept override;
-		size_t NumHomingButtons(size_t numVisibleAxes) const noexcept override { return 0; }
+		size_t NumHomingButtons(size_t numAxes) const noexcept override { return 0; }
 		AxesBitmap GetHomingFileName(AxesBitmap toBeHomed, AxesBitmap alreadyHomed, size_t numVisibleAxes, const StringRef& filename) const noexcept override;
 		bool QueryTerminateHomingMove(size_t axis) const noexcept override;
 		void OnHomingSwitchTriggered(size_t axis, bool highEnd, const float stepsPerMm[], DDA& dda) const noexcept override;
@@ -71,14 +71,16 @@ private:
 	float towerY[NumTowers];     // Y position of every tower
 	float printRadiusSquared;
 	float alwaysReachableHeight; 
-	float a_tower_x;
-	float a_tower_y;
-	float b_tower_x;
-	float b_tower_y;
-	float c_tower_x;
-	float c_tower_y;
+	float a_x;
+	float a_y;
+	float b_x;
+	float b_y;
+	float c_x;
+	float c_y;
 	float denominator;
 
 };
 
 #endif // SRC_MOVEMENT_KINEMATICS_COLINEARTRIPTERONKINEMATICS_H_
+
+// End
