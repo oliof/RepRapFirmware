@@ -14,8 +14,7 @@
 
 #include <limits>
 
-#define PIOVER180 0.01745329251994329576923690768489F
-
+ 
 #if SUPPORT_OBJECT_MODEL
 
 // Object model table and functions
@@ -34,10 +33,9 @@ constexpr ObjectModelTableEntry ColinearTripteronKinematics::objectModelTable[] 
 
 constexpr uint8_t ColinearTripteronKinematics::objectModelTableDescriptor[] = { 1, 1 };
 
-DEFINE_GET_OBJECT_MODEL_TABLE(ColinearTripteronKinematics)
+DEFINE_GET_OBJECT_MODEL_TABLE(ColinearTripteronKinematics);
 
 #endif
-
 
 ColinearTripteronKinematics::ColinearTripteronKinematics() noexcept : Kinematics(KinematicsType::colinearTripteron, 0.0, 0, true ), numTowers(NumTowers)
 {
@@ -141,9 +139,9 @@ bool ColinearTripteronKinematics::CartesianToMotorSteps(const float machinePos[]
     // actuator_mm[GAMMA_STEPPER] = g_x*cartesian_mm[X_AXIS] - g_y*cartesian_mm[Y_AXIS] + cartesian_mm[Z_AXIS];
 
 	bool ok = true;
-        motorPos[A_TOWER] = a_x*machinePos[X_AXIS] - a_y*machinePos[Y_AXIS] + machinePos[Z_AXIS];
-	motorPos[B_TOWER] = b_x*machinePos[X_AXIS] - b_y*machinePos[Y_AXIS] + machinePos[Z_AXIS];
-        motorPos[C_TOWER] = c_x*machinePos[X_AXIS] - c_y*machinePos[Y_AXIS] + machinePos[Z_AXIS];
+        motorPos[A_TOWER] = (a_x*machinePos[X_AXIS] - a_y*machinePos[Y_AXIS] + machinePos[Z_AXIS])*stepsPerMm[X_AXIS];
+	motorPos[B_TOWER] = (b_x*machinePos[X_AXIS] - b_y*machinePos[Y_AXIS] + machinePos[Z_AXIS])*stepsPerMm[X_AXIS];
+        motorPos[C_TOWER] = (c_x*machinePos[X_AXIS] - c_y*machinePos[Y_AXIS] + machinePos[Z_AXIS])*stepsPerMm[X_AXIS];
 	return ok;
 }
 
@@ -171,9 +169,9 @@ void ColinearTripteronKinematics::MotorStepsToCartesian(const int32_t motorPos[]
     // float b_tower_x = this->b_tower_x, b_tower_y = this->b_tower_y;
     // float c_tower_x = this->b_tower_x, c_tower_y = this->c_tower_y;
 
-    machinePos[X_AXIS] = (motorPos[A_TOWER]*(c_y-b_y) + motorPos[B_TOWER]*(a_y-c_y) + motorPos[C_TOWER]*(b_y-a_y)) / denominator;
-    machinePos[Y_AXIS] = (motorPos[A_TOWER]*(c_x-b_x) + motorPos[B_TOWER]*(a_x-c_x) + motorPos[C_TOWER]*(b_x-a_x)) / denominator;
-    machinePos[Z_AXIS] = (motorPos[A_TOWER]*(b_y*c_x-b_x*c_y) + motorPos[B_TOWER]*(a_x*c_y-a_y*c_x) + motorPos[C_TOWER]*(a_y*b_x-a_x*b_y)) / denominator;
+    machinePos[X_AXIS] = ((motorPos[A_TOWER]*(c_y-b_y) + motorPos[B_TOWER]*(a_y-c_y) + motorPos[C_TOWER]*(b_y-a_y)) / denominator)/stepsPerMm[X_AXIS];
+    machinePos[Y_AXIS] = ((motorPos[A_TOWER]*(c_x-b_x) + motorPos[B_TOWER]*(a_x-c_x) + motorPos[C_TOWER]*(b_x-a_x)) / denominator)/stepsPerMm[Y_AXIS];
+    machinePos[Z_AXIS] = ((motorPos[A_TOWER]*(b_y*c_x-b_x*c_y) + motorPos[B_TOWER]*(a_x*c_y-a_y*c_x) + motorPos[C_TOWER]*(a_y*b_x-a_x*b_y)) / denominator)/stepsPerMm[Z_AXIS];
 }
 
 
