@@ -9,6 +9,7 @@
 #ifndef SRC_MOVEMENT_KINEMATICS_COLINEARTRIPTERONKINEMATICS_H_
 #define SRC_MOVEMENT_KINEMATICS_COLINEARTRIPTERONKINEMATICS_H_
 
+#include "RepRapFirmware.h"
 #include "Kinematics.h"
 
 class ColinearTripteronKinematics: public Kinematics
@@ -37,10 +38,12 @@ public:
     AxesBitmap GetLinearAxes() const noexcept override;
 protected:
     DECLARE_OBJECT_MODEL
+    OBJECT_MODEL_ARRAY(towers)
 
 private:
     void Init() noexcept;
     void Recalc() noexcept;
+    void NormaliseEndstopAdjustments() noexcept;                                                                                                    // Make the average of the endstop
     // colinear tripteron default values
     #define PIOVER180 0.01745329251994329576923690768489F
     // arm angle in degrees
@@ -66,12 +69,14 @@ private:
     float bTowerRotation;
     float cTowerRotation;
     float numTowers;
+    float endstopAdjustments[NumTowers];
 
     // derived parameters
     float towerX[NumTowers];     // X position of every tower
     float towerY[NumTowers];     // Y position of every tower
     float printRadiusSquared;
     float alwaysReachableHeight; 
+    float homedCarriageHeights[NumTowers];
     float a_x;
     float a_y;
     float b_x;

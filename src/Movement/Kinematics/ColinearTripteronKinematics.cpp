@@ -6,8 +6,8 @@
  *
  */
 
-#include "Movement/Move.h"
 #include "ColinearTripteronKinematics.h"
+#include "Movement/Move.h"
 #include "RepRap.h"
 #include "Platform.h"
 #include "GCodes/GCodeBuffer/GCodeBuffer.h"
@@ -24,16 +24,29 @@
 // Macro to build a standard lambda function that includes the necessary type conversions
 #define OBJECT_MODEL_FUNC(...) OBJECT_MODEL_FUNC_BODY(ColinearTripteronKinematics, __VA_ARGS__)
 
+constexpr ObjectModelArrayDescriptor ColinearTripteronKinematics::towersArrayDescriptor =
+{
+        nullptr,                                        // no lock needed
+        [] (const ObjectModel *self, const ObjectExplorationContext&) noexcept -> size_t { return ((const ColinearTripteronKinematics*)self)->NumTowers; },
+        [] (const ObjectModel *self, ObjectExplorationContext& context) noexcept -> ExpressionValue { return ExpressionValue(self, 1); }
+};
+
 constexpr ObjectModelTableEntry ColinearTripteronKinematics::objectModelTable[] =
 {
 	// Within each group, these entries must be in alphabetical order
 	// 0. kinematics members
-	{ "name",	OBJECT_MODEL_FUNC(self->GetName(true)), 	ObjectModelEntryFlags::none },
+	{ "homedHeight",	OBJECT_MODEL_FUNC(self->homedHeight, 3), 	  ObjectModelEntryFlags::none },
+	{ "name",		OBJECT_MODEL_FUNC(self->GetName(true)), 	  ObjectModelEntryFlags::none },
+	{ "printRadius",	OBJECT_MODEL_FUNC(self->printRadius, 3), 	  ObjectModelEntryFlags::none },
+        { "towers",             OBJECT_MODEL_FUNC_NOSELF(&towersArrayDescriptor), ObjectModelEntryFlags::none },
+	// 1. tower members
+        { "endstopAdjustment",  OBJECT_MODEL_FUNC(self->endstopAdjustments[context.GetLastIndex()], 3), ObjectModelEntryFlags::none }
 };
 
-constexpr uint8_t ColinearTripteronKinematics::objectModelTableDescriptor[] = { 1, 1 };
+constexpr uint8_t ColinearTripteronKinematics::objectModelTableDescriptor[] = { 2, 4, 1 };
+	
 
-DEFINE_GET_OBJECT_MODEL_TABLE(ColinearTripteronKinematics);
+DEFINE_GET_OBJECT_MODEL_TABLE(ColinearTripteronKinematics)
 
 #endif
 
@@ -57,9 +70,8 @@ void ColinearTripteronKinematics::Init() noexcept
 	cTowerRotation = DefaultCTowerRotation;
 	printRadius    = DefaultPrintRadius;
 	homedHeight    = DefaultHomedHeight;
-	numTowers      = NumTowers;
 
-     Recalc();
+        Recalc();
 }
 
 
@@ -83,38 +95,90 @@ void ColinearTripteronKinematics::Recalc() noexcept
     denominator = a_y * b_x - c_y * b_x - a_x * b_y - a_y * c_x + b_y * c_x + a_x * c_y;
 	printRadiusSquared = fsquare(printRadius);
 	alwaysReachableHeight = homedHeight; // naive approach for now.
+
+	// calculate the always-reachable height
+	alwaysReachableHeight = homedHeight;
+	for (size_t axis = 0; axis < NumTowers; ++axis)
+	{
+		homedCarriageHeights[axis] = homedHeight + endstopAdjustments[axis];
+		const float heightLimit = homedCarriageHeights[axis];
+		if (heightLimit < alwaysReachableHeight)
+		{
+			alwaysReachableHeight = heightLimit;
+		}
+	}
+
+	
+}
+
+
+// Make the average of the endstop adjustments zero, without changing the individual homed carriage heights
+void ColinearTripteronKinematics::NormaliseEndstopAdjustments() noexcept
+{
+	const float eav = (endstopAdjustments[A_TOWER] + endstopAdjustments[B_TOWER] + endstopAdjustments[C_TOWER])/3.0;
+	for (size_t i = 0; i < NumTowers; ++i)
+	{
+		endstopAdjustments[i] -= eav;
+	}
+	homedHeight += eav;
 }
 
 
 bool ColinearTripteronKinematics::Configure(unsigned int mCode, GCodeBuffer& gb, const StringRef& reply, bool& error) THROWS(GCodeException)
 {
-// M669 K12 A30 R120 H220 T0:120:240 
-
-    if (mCode == 669)
+    // M669 K12 A30 R120 H220 T0:120:240 
+    // M666 X0.0 Y0.2 Z-0.3
+    switch(mCode)
     {
-        bool seen = false;
-        gb.TryGetFValue('A', armAngle, seen);
-        gb.TryGetFValue('R', printRadius, seen);
-        gb.TryGetFValue('H', homedHeight, seen);
-        if (gb.Seen('T'))
-	{
-            seen = true;
-	    float towerRotations[3];
-            size_t numTowerRotations = 3;
-   	    gb.GetFloatArray(towerRotations, numTowerRotations, false);
-            if(numTowerRotations == 3)
+	case 669:
+        {
+            bool seen = false;
+            gb.TryGetFValue('A', armAngle, seen);
+            gb.TryGetFValue('R', printRadius, seen);
+            gb.TryGetFValue('H', homedHeight, seen);
+            if (gb.Seen('T'))
 	    {
-		aTowerRotation = towerRotations[0];
-		bTowerRotation = towerRotations[1];
-		cTowerRotation = towerRotations[2];
+                seen = true;
+	        float towerRotations[3];
+                size_t numTowerRotations = 3;
+   	        gb.GetFloatArray(towerRotations, numTowerRotations, false);
+                if(numTowerRotations == 3)
+	        {
+                    aTowerRotation = towerRotations[0];
+                    bTowerRotation = towerRotations[1];
+                    cTowerRotation = towerRotations[2];
+                }
+            } 
+	    if (seen)
+	    {
+                Recalc();
+                return seen;
+            }	
+            else
+            {
+                return Kinematics::Configure(mCode, gb, reply, error);
             }
-	} 
-	Recalc();
-        return seen;
-    }	
-    else
-    {
-        return Kinematics::Configure(mCode, gb, reply, error);
+        }
+        case 666:
+        {
+            bool seen = false;
+            for (size_t tower = 0; tower < NumTowers; ++tower)
+            {
+                gb.TryGetFValue("XYZUVW"[tower], endstopAdjustments[tower], seen);
+            }
+            if (seen)
+  	    {
+                Recalc();
+            }
+	    else
+            {
+                reply.printf("Endstop adjustments A%.2f B%.2f C%.2f",
+   	        (double)endstopAdjustments[A_TOWER], (double)endstopAdjustments[B_TOWER], (double)endstopAdjustments[C_TOWER]);
+	    }
+	    return seen;
+        } 
+        default:
+            return Kinematics::Configure(mCode, gb, reply, error);
     }
 }
 
