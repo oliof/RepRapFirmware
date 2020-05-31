@@ -37,12 +37,14 @@ constexpr ObjectModelTableEntry ColinearTripteronKinematics::objectModelTable[] 
 {
     // Within each group, these entries must be in alphabetical order
     // 0. kinematics members
-    { "homedHeight",    OBJECT_MODEL_FUNC(self->homedHeight, 3),      ObjectModelEntryFlags::none },
-    { "name",       OBJECT_MODEL_FUNC(self->GetName(true)),       ObjectModelEntryFlags::none },
-    { "printRadius",    OBJECT_MODEL_FUNC(self->printRadius, 3),      ObjectModelEntryFlags::none },
-        { "towers",             OBJECT_MODEL_FUNC_NOSELF(&towersArrayDescriptor), ObjectModelEntryFlags::none },
+    { "armAngle",               OBJECT_MODEL_FUNC(self->armAngle, 3),                                   ObjectModelEntryFlags::none },
+    { "homedHeight",            OBJECT_MODEL_FUNC(self->homedHeight, 3),                                ObjectModelEntryFlags::none },
+    { "name",                   OBJECT_MODEL_FUNC(self->GetName(true)),                                 ObjectModelEntryFlags::none },
+    { "planarMoveCompensation", OBJECT_MODEL_FUNC(self->planarMoveCompensation, 3),                     ObjectModelEntryFlags::none },
+    { "printRadius",            OBJECT_MODEL_FUNC(self->printRadius, 3),                                ObjectModelEntryFlags::none },
+    { "towers",                 OBJECT_MODEL_FUNC_NOSELF(&towersArrayDescriptor),                       ObjectModelEntryFlags::none },
     // 1. tower members
-        { "endstopAdjustment",  OBJECT_MODEL_FUNC(self->endstopAdjustments[context.GetLastIndex()], 3), ObjectModelEntryFlags::none }
+    { "endstopAdjustment",      OBJECT_MODEL_FUNC(self->endstopAdjustments[context.GetLastIndex()], 3), ObjectModelEntryFlags::none },
 };
 
 constexpr uint8_t ColinearTripteronKinematics::objectModelTableDescriptor[] = { 2, 4, 1 };
@@ -80,7 +82,7 @@ void ColinearTripteronKinematics::Init() noexcept
 void ColinearTripteronKinematics::Recalc() noexcept
 {
     // arm angle and tangent
-    float arm_angle_tan = tanf(PIOVER180*armAngle);
+    float arm_angle_tan = tanf(PIOVER180*armAngle) * planarMoveCompensation;
     // tower rotations
     float a_rotation = PIOVER180*aTowerRotation;
     float b_rotation = PIOVER180*bTowerRotation;
@@ -176,14 +178,16 @@ bool ColinearTripteronKinematics::Configure(unsigned int mCode, GCodeBuffer& gb,
             {
                 gb.TryGetFValue("ABC"[tower], endstopAdjustments[tower], seen);
             }
+                gb.TryGetFValue('P', planarMoveCompensation , seen);
             if (seen)
         {
                 Recalc();
             }
         else
             {
-                reply.printf("Endstop adjustments A%.2f B%.2f C%.2f",
-            (double)endstopAdjustments[A_TOWER], (double)endstopAdjustments[B_TOWER], (double)endstopAdjustments[C_TOWER]);
+                reply.printf("Endstop adjustments A%.2f B%.2f C%.2f, planar move compensation %.2f",
+            (double)endstopAdjustments[A_TOWER], (double)endstopAdjustments[B_TOWER], (double)endstopAdjustments[C_TOWER],
+            (double)planarMoveCompensation);
         }
         return seen;
         }

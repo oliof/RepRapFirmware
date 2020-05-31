@@ -68,7 +68,9 @@ class ColinearTripteronKinematics: public Kinematics
     float bTowerRotation;
     float cTowerRotation;
     float numTowers;
+    // adjstments
     float endstopAdjustments[NumTowers];
+    float planarMoveCompensation = 1;
 
     // derived parameters
     float towerX[NumTowers];     // X position of every tower
