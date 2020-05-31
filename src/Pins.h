@@ -30,6 +30,8 @@
 #  define PLATFORM DuetM
 # elif defined(PCCB)
 #  define PLATFORM Pccb
+# elif defined(DUET_5LC)
+#  define PLATFORM Duet5LC
 # elif defined(__LPC17xx__)
 #  define PLATFORM LPC
 # else
@@ -94,6 +96,10 @@
 
 #ifndef SUPPORT_TMC51xx
 # define SUPPORT_TMC51xx		0
+#endif
+
+#ifndef VARIABLE_NUM_DRIVERS
+# define VARIABLE_NUM_DRIVERS	0
 #endif
 
 #ifndef SUPPORT_CAN_EXPANSION

@@ -40,14 +40,14 @@ const char *SafeStrptime(const char *buf, const char *format, struct tm *timeptr
 # undef array			// needed because some files include <functional>
 #endif
 
-#include "Core.h"
+# include "Core.h"
 
 #ifndef SAMC21
-# define SAMC21	(defined(__SAMC21G18A__) && __SAMC21G18A__)
+# define SAMC21	0
 #endif
 
-#ifndef SAME51
-# define SAME51	(defined(__SAME51N19A__) && __SAME51N19A__)
+#ifndef SAME5x
+# define SAME5x	0
 #endif
 
 #if SAME70

@@ -98,7 +98,7 @@ constexpr Pin UsbVBusPin = PortCPin(11);			// Pin used to monitor VBUS on USB po
 // The numbers of entries in each array must correspond with the values of DRIVES, AXES, or HEATERS. Set values to NoPin to flag unavailability.
 
 // Drivers
-constexpr Pin GlobalTmc22xxEnablePin = 1;			// The pin that drives ENN of all drivers
+constexpr Pin GlobalTmc22xxEnablePin = PortAPin(1);	// The pin that drives ENN of all drivers
 constexpr Pin ENABLE_PINS[NumDirectDrivers] = { NoPin, NoPin, NoPin, NoPin, NoPin, PortCPin(27), PortCPin(25) };
 constexpr Pin STEP_PINS[NumDirectDrivers] = { PortCPin(20), PortCPin(2), PortCPin(28), PortCPin(4), PortCPin(5), PortCPin(31), PortCPin(21) };
 constexpr Pin DIRECTION_PINS[NumDirectDrivers] = { PortCPin(18), PortAPin(8), PortBPin(4), PortBPin(7), PortCPin(6), PortAPin(18), PortCPin(24) };
@@ -305,20 +305,16 @@ namespace StepPins
 				: 0;
 	}
 
-	// Set the specified step pins high
-	// This needs to be as fast as possible, so we do a parallel write to the port(s).
-	// We rely on only those port bits that are step pins being set in the PIO_OWSR register of each port
-	static inline void StepDriversHigh(uint32_t driverMap) noexcept
+	// Set the specified step pins high. This needs to be fast.
+	static inline __attribute__((always_inline)) void StepDriversHigh(uint32_t driverMap) noexcept
 	{
-		PIOC->PIO_ODSR = driverMap;				// on Duet Maestro all step pins are on port C
+		PIOC->PIO_SODR = driverMap;				// on Duet Maestro all step pins are on port C
 	}
 
-	// Set all step pins low
-	// This needs to be as fast as possible, so we do a parallel write to the port(s).
-	// We rely on only those port bits that are step pins being set in the PIO_OWSR register of each port
-	static inline void StepDriversLow() noexcept
+	// Set the specified step pins low. This needs to be fast.
+	static inline void __attribute__((always_inline)) StepDriversLow(uint32_t driverMap) noexcept
 	{
-		PIOC->PIO_ODSR = 0;						// on Duet Maestro all step pins are on port C
+		PIOC->PIO_CODR = driverMap;				// on Duet Maestro all step pins are on port C
 	}
 }
 
