@@ -47,7 +47,7 @@ constexpr ObjectModelTableEntry ColinearTripteronKinematics::objectModelTable[] 
     { "endstopAdjustment",      OBJECT_MODEL_FUNC(self->endstopAdjustments[context.GetLastIndex()], 3), ObjectModelEntryFlags::none },
 };
 
-constexpr uint8_t ColinearTripteronKinematics::objectModelTableDescriptor[] = { 2, 4, 1 };
+constexpr uint8_t ColinearTripteronKinematics::objectModelTableDescriptor[] = { 2, 6, 1 };
 
 
 DEFINE_GET_OBJECT_MODEL_TABLE(ColinearTripteronKinematics)
