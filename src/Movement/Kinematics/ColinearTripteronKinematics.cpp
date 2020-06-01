@@ -129,14 +129,14 @@ void ColinearTripteronKinematics::NormaliseEndstopAdjustments() noexcept
 bool ColinearTripteronKinematics::Configure(unsigned int mCode, GCodeBuffer& gb, const StringRef& reply, bool& error) THROWS(GCodeException)
 {
     // M669 K12 A30 R120 H220 T0:120:240
-    // M666 X0.0 Y0.2 Z-0.3
+    // M666 A0.0 B0.2 C-0.3 P1.2
     switch (mCode)
     {
     case 669:
     {
             if (!gb.Seen('K'))
             {
-                reply.printf("Kinematics is %s, arm angle %.2f, print radius %.2f, print height %.2f, tower rotations A %.2f%s B %.2f%s C %.2f%s",
+                reply.printf("Kinematics is %s, arm angle %.2f, print radius %.2f, print height %.2f, tower rotations A %.2f%s B %.2f%s C %.2f%s. Run M666 to see adjustment factors.",
                              GetName(true), (double)armAngle, (double)printRadius, (double)homedHeight, (double)aTowerRotation, DEGREE_SYMBOL,
                              (double)bTowerRotation, DEGREE_SYMBOL, (double)cTowerRotation, DEGREE_SYMBOL);
                return true;
