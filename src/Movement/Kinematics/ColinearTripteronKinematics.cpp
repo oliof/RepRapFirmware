@@ -408,9 +408,9 @@ AxesBitmap ColinearTripteronKinematics::GetLinearAxes() const noexcept
 /*
  *  # TODO
  *  ## Must
- *  - LimitPosition() "done"
+ *  - LimitPosition()
+ *  - Home Button...
  *  ## Should
- *  - EndStop Adjustment
  *  - Tower Tilt?
  *
  */
