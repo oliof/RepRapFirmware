@@ -326,7 +326,7 @@ AxesBitmap ColinearTripteronKinematics::GetHomingFileName(AxesBitmap toBeHomed, 
     // If homing X, Y or Z we must home all the towers
     if (toBeHomed.Intersects(XyzAxes))
     {
-        filename.copy("homect.g");
+        filename.copy("homeall.g");
         return AxesBitmap();
     }
 
