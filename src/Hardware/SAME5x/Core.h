@@ -22,6 +22,8 @@
 #include <General/SimpleMath.h>
 #include <cctype>
 
+#include "AtmelStart_SAME5x/atmel_start_pins.h"
+
 #define SAM4E	0
 #define SAM4S	0
 #define SAM3XA	0
@@ -36,7 +38,8 @@ inline constexpr Pin PortBPin(unsigned int n) noexcept { return 32+n; }
 inline constexpr Pin PortCPin(unsigned int n) noexcept { return 64+n; }
 inline constexpr Pin PortDPin(unsigned int n) noexcept { return 96+n; }
 
-void digitalWrite(Pin pin, bool state) noexcept;
+uint32_t millis() noexcept;
+extern "C" uint32_t trueRandom() noexcept;
 
 // Pin mode enumeration. Would ideally be a C++ scoped enum, but we need to use it from C library functions.
 enum PinMode
@@ -136,6 +139,44 @@ static inline bool inInterrupt() noexcept
 	return (__get_IPSR() & 0x01FF) != 0;
 }
 
-extern uint32_t millis() noexcept;
+static inline int32_t random(uint32_t howbig) noexcept
+{
+	return trueRandom() % howbig;
+}
+
+static inline uint32_t random(uint32_t howsmall, uint32_t howbig) noexcept
+{
+	return random(howbig - howsmall) + howsmall;
+}
+
+// Set a pin high with no error checking
+inline void fastDigitalWriteHigh(uint32_t pin) noexcept
+{
+	hri_port_set_OUT_reg(PORT, GPIO_PORT(pin), 1U << GPIO_PIN(pin));
+}
+
+// Set a pin low with no error checking
+inline void fastDigitalWriteLow(uint32_t pin) noexcept
+{
+	hri_port_clear_OUT_reg(PORT, GPIO_PORT(pin), 1U << GPIO_PIN(pin));
+}
+
+static inline void delayMicroseconds(uint32_t) __attribute__((always_inline, unused));
+static inline void delayMicroseconds(uint32_t usec)
+{
+    // Based on Paul Stoffregen's implementation for Teensy 3.0 (http://www.pjrc.com/)
+    if (usec != 0)
+    {
+		uint32_t n = usec * (SystemCoreClock / 3000000);
+		asm volatile
+		(
+			".syntax unified"				"\n\t"
+			"L_%=_delayMicroseconds:"       "\n\t"
+			"subs   %0, #1"   				"\n\t"
+			"bne    L_%=_delayMicroseconds" "\n"
+			: "+r" (n) :
+		);
+    }
+}
 
 #endif /* SRC_HARDWARE_SAME5X_CORE_H_ */

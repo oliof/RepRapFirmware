@@ -111,7 +111,7 @@ extern "C" void hsmciIdle(uint32_t stBits, uint32_t dmaBits) noexcept
 		XDMAC->XDMAC_CHID[DmacChanHsmci].XDMAC_CIE = dmaBits;
 		XDMAC->XDMAC_GIE = 1u << DmacChanHsmci;
 #endif
-		if (TaskBase::Take(200))
+		if (!TaskBase::Take(200))
 		{
 			// We timed out waiting for the HSMCI operation to complete
 			reprap.GetPlatform().LogError(ErrorCode::HsmciTimeout);
@@ -756,7 +756,7 @@ void RepRap::Diagnostics(MessageType mtype) noexcept
 	platform->MessageF(mtype, "%s version %s running on %s\n", FIRMWARE_NAME, VERSION, platform->GetElectronicsString());
 #endif
 
-#if SUPPORTS_UNIQUE_ID
+#if MCU_HAS_UNIQUE_ID
 	platform->MessageF(mtype, "Board ID: %s\n", platform->GetUniqueIdString());
 #endif
 

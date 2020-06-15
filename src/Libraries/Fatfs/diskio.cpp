@@ -41,11 +41,11 @@
  *
  */
 
-#include "ctrl_access.h"
 #include "compiler.h"
-
 #include "diskio.h"
-#include "conf_sd_mmc.h"
+
+#include <Libraries/sd_mmc/ctrl_access.h>
+#include <Libraries/sd_mmc/conf_sd_mmc.h>
 
 #include "RepRapFirmware.h"
 #include "RepRap.h"
@@ -114,17 +114,10 @@ float DiskioGetAndClearLongestWriteTime() noexcept
  */
 DSTATUS disk_initialize(BYTE drv) noexcept
 {
-#if LUN_USB
-	/* USB disk with multiple LUNs */
-	if (drv > LUN_ID_USB + Lun_usb_get_lun()) {
-		return STA_NOINIT;
-	}
-#else
 	if (drv > MAX_LUN) {
 		/* At least one of the LUN should be defined */
 		return STA_NOINIT;
 	}
-#endif
 
 	MutexLocker lock((drv >= SD_MMC_HSMCI_MEM_CNT) ? Tasks::GetSpiMutex() : nullptr);
 
@@ -189,7 +182,6 @@ DRESULT disk_read(BYTE drv, BYTE *buff, DWORD sector, BYTE count) noexcept
 		debugPrintf("Read %u %u %lu\n", drv, count, sector);
 	}
 
-#if ACCESS_MEM_TO_RAM
 	MutexLocker lock((drv >= SD_MMC_HSMCI_MEM_CNT) ? Tasks::GetSpiMutex() : nullptr);
 
 	const uint8_t uc_sector_size = mem_sector_size(drv);
@@ -241,10 +233,6 @@ DRESULT disk_read(BYTE drv, BYTE *buff, DWORD sector, BYTE count) noexcept
 	}
 
 	return RES_OK;
-
-#else
-	return RES_ERROR;
-#endif
 }
 
 /**
@@ -270,7 +258,6 @@ DRESULT disk_write(BYTE drv, BYTE const *buff, DWORD sector, BYTE count) noexcep
 		debugPrintf("Write %u %u %lu\n", drv, count, sector);
 	}
 
-#if ACCESS_MEM_TO_RAM
 	MutexLocker lock((drv >= SD_MMC_HSMCI_MEM_CNT) ? Tasks::GetSpiMutex() : nullptr);
 
 	const uint8_t uc_sector_size = mem_sector_size(drv);
@@ -324,10 +311,6 @@ DRESULT disk_write(BYTE drv, BYTE const *buff, DWORD sector, BYTE count) noexcep
 	}
 
 	return RES_OK;
-
-#else
-	return RES_ERROR;
-#endif
 }
 
 #endif /* _READONLY */
@@ -398,7 +381,7 @@ DRESULT disk_ioctl(BYTE drv, BYTE ctrl, void *buff) noexcept
 			return RES_ERROR;
 		}
 
-		*(U8 *)buff = uc_sector_size * SECTOR_SIZE_DEFAULT;
+		*(uint8_t *)buff = uc_sector_size * SECTOR_SIZE_DEFAULT;
 
 		res = RES_OK;
 	}

@@ -8,7 +8,8 @@
  * and route the interrupts caused by the various DMA channels to the corresponding drivers.
  */
 
-#include "DmacManager.h"
+#include <RepRapFirmware.h>
+#include "DmacManager_SAME70.h"
 
 #if SAME70
 
