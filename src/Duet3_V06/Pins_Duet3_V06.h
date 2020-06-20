@@ -135,6 +135,7 @@ constexpr float V12MonitorVoltageRange = (60.4 + 4.7)/4.7 * 3.3;			// voltage di
 
 // Digital pin number to turn the IR LED on (high) or off (low), also controls the DIAG LED
 constexpr Pin DiagPin = PortCPin(20);
+constexpr bool DiagOnPolarity = true;
 
 // SD cards
 constexpr size_t NumSdCards = 1;
@@ -142,6 +143,7 @@ constexpr Pin SdCardDetectPins[1] = { PortAPin(29) };
 constexpr Pin SdWriteProtectPins[1] = { NoPin };
 constexpr Pin SdSpiCSPins[1] = { NoPin };
 constexpr uint32_t ExpectedSdCardSpeed = 25000000;
+constexpr IRQn SdhcIRQn = HSMCI_IRQn;
 
 // DotStar LED control
 #define DOTSTAR_USES_USART	0
@@ -152,8 +154,13 @@ constexpr uint32_t DotStarClockId = ID_QSPI;
 constexpr IRQn DotStarIRQn = QSPI_IRQn;
 
 // Ethernet
-constexpr Pin PhyInterruptPin = PortCPin(6);
-constexpr Pin PhyResetPin = PortDPin(11);
+constexpr Pin EthernetPhyInterruptPin = PortCPin(6);
+constexpr Pin EthernetPhyResetPin = PortDPin(11);
+
+// Shared SPI definitions
+#define USART_SPI		1
+#define USART_SSPI		USART0
+#define ID_SSPI			ID_USART0
 
 // Enum to represent allowed types of pin access
 // We don't have a separate bit for servo, because Duet PWM-capable ports can be used for servos if they are on the Duet main board

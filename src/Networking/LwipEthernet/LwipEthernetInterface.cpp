@@ -18,8 +18,9 @@
 #include "Networking/FtpResponder.h"
 #include "Networking/TelnetResponder.h"
 #include "General/IP4String.h"
-#include "Version.h"
+#include "Version.h"								// version is reported by MDNS
 #include "GMAC/ethernet_sam.h"
+#include <Hardware/SAME70/same70_gmac.h>			// for error counts used in function Diagnostics
 
 extern "C"
 {
@@ -314,9 +315,7 @@ GCodeResult LwipEthernetInterface::GetNetworkState(const StringRef& reply) noexc
 // Start up the network
 void LwipEthernetInterface::Start() noexcept
 {
-#if defined(DUET3)
-	digitalWrite(PhyResetPin, true);			// bring the Ethernet Phy out of reset
-#endif
+	digitalWrite(EthernetPhyResetPin, true);			// bring the Ethernet Phy out of reset
 
 	if (initialised)
 	{
@@ -352,9 +351,7 @@ void LwipEthernetInterface::Stop() noexcept
 	{
 		netif_set_down(&gs_net_if);
 
-#if defined(DUET3)
-		pinMode(PhyResetPin, OUTPUT_LOW);		// hold the Ethernet Phy chip in reset
-#endif
+		pinMode(EthernetPhyResetPin, OUTPUT_LOW);		// hold the Ethernet Phy chip in reset
 		SetState(NetworkState::disabled);
 	}
 }

@@ -160,12 +160,14 @@ constexpr float PowerMonitorVoltageRange = 11.0 * 3.3;						// We use an 11:1 vo
 constexpr Pin Z_PROBE_PIN = PortCPin(15);									// Z probe analog input
 constexpr Pin Z_PROBE_MOD_PIN = PortCPin(26);
 constexpr Pin DiagPin = Z_PROBE_MOD_PIN;
+constexpr bool DiagOnPolarity = true;
 
 // SD cards
 constexpr size_t NumSdCards = 2;
 constexpr Pin SdCardDetectPins[NumSdCards] = { PortCPin(8), NoPin };
 constexpr Pin SdWriteProtectPins[NumSdCards] = { NoPin, NoPin };
 constexpr Pin SdSpiCSPins[1] = { PortBPin(13) };
+constexpr IRQn SdhcIRQn = HSMCI_IRQn;
 constexpr uint32_t ExpectedSdCardSpeed = 15000000;
 
 // 12864 LCD
@@ -181,6 +183,11 @@ constexpr Pin LcdBeepPin = PortAPin(15);
 constexpr Pin EncoderPinA = PortBPin(5);
 constexpr Pin EncoderPinB = PortCPin(3);
 constexpr Pin EncoderPinSw = PortAPin(7);
+
+// Shared SPI definitions
+#define USART_SPI		1
+#define USART_SSPI		USART0
+#define ID_SSPI			ID_USART0
 
 // Enum to represent allowed types of pin access
 // We don't have a separate bit for servo, because Duet PWM-capable ports can be used for servos if they are on the Duet main board
