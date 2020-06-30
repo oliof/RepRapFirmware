@@ -62,13 +62,86 @@ static void _mci_reset(const void *const hw)
  */
 static void _mci_set_speed(const void *const hw, uint32_t speed, uint8_t prog_clock_mode)
 {
+#if 0	//dc42
+	// The following is based on the code from Harmony
+	uint32_t baseclk_frq = 0;
+	uint16_t divider = 0;
+	uint32_t clkmul = 0;
+
+	// Disable clock before changing it
+	if (hri_sdhc_get_CCR_SDCLKEN_bit(hw))
+	{
+		// It hangs on this next line because the SDHC_PSR_CMDINHD_CANNOT bit it stuck on
+		// If we comment out this line, it doesn't hang but it fails to mount the SD card
+		while (hri_sdhc_read_PSR_reg(hw) & (SDHC_PSR_CMDINHC_CANNOT | SDHC_PSR_CMDINHD_CANNOT)) { }
+		hri_sdhc_clear_CCR_SDCLKEN_bit(hw);
+	}
+
+	// Get the base clock frequency
+	baseclk_frq = CONF_BASE_FREQUENCY/2;
+
+	// Use programmable clock mode if it is supported
+	clkmul = hri_sdhc_read_CA1R_CLKMULT_bf(hw);
+	if (clkmul > 0)
+	{
+		/* F_SDCLK = F_MULTCLK/(DIV+1), where F_MULTCLK = F_BASECLK x (CLKMULT+1)
+		   F_SDCLK = (F_BASECLK x (CLKMULT + 1))/(DIV + 1)
+		   For a given F_SDCLK, DIV = [(F_BASECLK x (CLKMULT + 1))/F_SDCLK] - 1
+		*/
+		divider = (baseclk_frq * (clkmul + 1)) / speed;
+		if (divider > 0)
+		{
+			divider = divider - 1;
+		}
+		hri_sdhc_set_CCR_CLKGSEL_bit(hw);
+	}
+	else
+	{
+		// Programmable clock mode is not supported, so use divided clock mode
+		/* F_SDCLK = F_BASECLK/(2 x DIV).
+		   For a given F_SDCLK, DIV = F_BASECLK/(2 x F_SDCLK)
+		*/
+		divider =  baseclk_frq/(2 * speed);
+		hri_sdhc_clear_CCR_CLKGSEL_bit(hw);
+	}
+
+	if (speed > 25000000)
+	{
+		// Enable the high speed mode
+		hri_sdhc_set_HC1R_HSEN_bit(hw);
+	}
+	else
+	{
+		// Clear the high speed mode
+		hri_sdhc_clear_HC1R_HSEN_bit(hw);
+	}
+
+	if (hri_sdhc_get_HC1R_HSEN_bit(hw) && divider == 0)
+	{
+		// IP limitation, if high speed mode is active divider must be non zero
+		divider = 1;
+	}
+
+	// Set the divider
+	hri_sdhc_write_CCR_SDCLKFSEL_bf(hw, divider & 0xFF);
+	hri_sdhc_write_CCR_USDCLKFSEL_bf(hw, divider >> 8);
+
+	// Enable internal clock
+	hri_sdhc_set_CCR_INTCLKEN_bit(hw);
+
+	// Wait for the internal clock to stabilize
+	while (hri_sdhc_get_CCR_INTCLKS_bit(hw) == 0) { }
+
+	// Enable the SDCLK
+	hri_sdhc_set_CCR_SDCLKEN_bit(hw);
+#else
 	uint32_t div;
 	uint32_t clkbase;
 	uint32_t clkmul;
 
-	if (hri_sdhc_get_CCR_SDCLKEN_bit(hw)) {
-		while (hri_sdhc_read_PSR_reg(hw) & (SDHC_PSR_CMDINHC_CANNOT | SDHC_PSR_CMDINHD_CANNOT))
-			;
+	if (hri_sdhc_get_CCR_SDCLKEN_bit(hw))
+	{
+		while (hri_sdhc_read_PSR_reg(hw) & (SDHC_PSR_CMDINHC_CANNOT | SDHC_PSR_CMDINHD_CANNOT)) { }
 		hri_sdhc_clear_CCR_SDCLKEN_bit(hw);
 	}
 	//	clkbase = hri_sdhc_read_CA0R_BASECLKF_bf(hw);
@@ -76,28 +149,34 @@ static void _mci_set_speed(const void *const hw, uint32_t speed, uint8_t prog_cl
 	clkmul  = hri_sdhc_read_CA1R_CLKMULT_bf(hw);
 
 	/* If programmable clock mode is enabled, baseclk is divided by 2 */
-	if (clkmul > 0) {
+	if (clkmul > 0)
+	{
 		clkbase = clkbase / 2;
 	}
-	if (prog_clock_mode == 0) {
+	if (prog_clock_mode == 0)
+	{
 		/* divided clock mode */
 		hri_sdhc_clear_CCR_CLKGSEL_bit(hw);
 		/* speed = Base Clock / 2*div */
 		div = (clkbase / speed) / 2;
-	} else {
+	}
+	else
+	{
 		/* programmable clock mode */
 		hri_sdhc_set_CCR_CLKGSEL_bit(hw);
 		/* Specific constraint for SDHC/SDMMC IP
 		   speed = Base Clock * Multi Clock / (div+1) */
 		div = (clkbase * (clkmul + 1)) / speed;
-		if (div > 0) {
+		if (div > 0)
+		{
 			div = div - 1;
 		}
 	}
 
 	/* Specific constraint for SDHC/SDMMC IP
 	The clock divider (DIV) in SDMMC_CCR must be set to a value different from 0 when HSEN is 1. */
-	if ((hri_sdhc_get_HC1R_HSEN_bit(hw)) && (div == 0)) {
+	if ((hri_sdhc_get_HC1R_HSEN_bit(hw)) && (div == 0))
+	{
 		div = 1;
 	}
 
@@ -107,11 +186,32 @@ static void _mci_set_speed(const void *const hw, uint32_t speed, uint8_t prog_cl
 
 	hri_sdhc_set_CCR_INTCLKEN_bit(hw);
 	/* Repeat this step until Clock Stable is 1 */
-	while (hri_sdhc_get_CCR_INTCLKS_bit(hw) == 0)
-		;
+	while (hri_sdhc_get_CCR_INTCLKS_bit(hw) == 0) { }
+
 	/* Output the clock to the card -- Set SD Clock Enable */
 	hri_sdhc_set_CCR_SDCLKEN_bit(hw);
+#endif
 }
+
+#if 1	// dc42
+
+uint32_t _mci_get_clock_speed(const void *const hw)
+{
+	uint32_t clkbase = CONF_BASE_FREQUENCY;
+	uint32_t clkmul = hri_sdhc_read_CA1R_CLKMULT_bf(hw);
+
+	/* If programmable clock mode is enabled, baseclk is divided by 2 */
+	if (clkmul > 0)
+	{
+		clkbase = clkbase / 2;
+	}
+	const uint32_t div = (hri_sdhc_read_CCR_USDCLKFSEL_bf(hw) << 8) | hri_sdhc_read_CCR_SDCLKFSEL_bf(hw);
+	return (hri_sdhc_get_CCR_CLKGSEL_bit(hw))
+			? (clkbase * (clkmul + 1))/div				// Programmable clock mode
+				: clkbase / (2 * div);					// Divided clock mode
+}
+
+#endif
 
 /**
  * \brief Wait the end of busy signal on data line
@@ -263,7 +363,9 @@ int32_t _mci_sync_select_device(struct _mci_sync_device *const mci_dev, uint8_t 
 	}
 
 	if (hri_sdhc_get_HC2R_PVALEN_bit(hw) == 0) {
+#if 0	//dc
 		_mci_set_speed(hw, clock, CONF_SDHC0_CLK_GEN_SEL);
+#endif
 		_mci_set_speed(hw, clock, CONF_SDHC1_CLK_GEN_SEL);
 	}
 
@@ -574,6 +676,46 @@ bool _mci_sync_write_word(struct _mci_sync_device *const mci_dev, uint32_t value
  */
 bool _mci_sync_start_read_blocks(struct _mci_sync_device *const mci_dev, void *dst, uint16_t nb_block)
 {
+#if 1	//dc42 with thanks to alkgrove
+	if (nb_block != 0)
+	{
+		do
+		{
+			if (hri_sdhc_get_EISTR_reg(mci_dev->hw, SDHC_EISTR_DATTEO | SDHC_EISTR_DATCRC | SDHC_EISTR_DATEND))
+			{
+				_mci_reset(mci_dev->hw);
+				return false;
+			}
+		} while (!hri_sdhc_get_NISTR_BRDRDY_bit(mci_dev->hw));		// until buffer read ready
+		hri_sdhc_set_NISTR_BRDRDY_bit(mci_dev->hw);					// clear the buffer read ready bit
+
+		// dc42 optimised the following loop by examining the generated assembler
+		const unsigned int NumQuadWords = (nb_block * mci_dev->mci_sync_block_size) >> 3;
+		uint32_t *p = (uint32_t*)dst;
+		do
+		{
+			while (!hri_sdhc_get_PSR_BUFRDEN_bit(mci_dev->hw)) { }
+			*p = hri_sdhc_read_BDPR_reg(mci_dev->hw);
+			asm volatile("" ::: "memory");
+			++p;
+			while (!hri_sdhc_get_PSR_BUFRDEN_bit(mci_dev->hw)) { }
+			*p = hri_sdhc_read_BDPR_reg(mci_dev->hw);
+			asm volatile("" ::: "memory");
+			++p;
+		} while (p < (uint32_t*)dst + (2 * NumQuadWords));
+
+
+		do
+		{
+			if (hri_sdhc_get_EISTR_reg(mci_dev->hw, SDHC_EISTR_DATTEO | SDHC_EISTR_DATCRC | SDHC_EISTR_DATEND))
+			{
+				_mci_reset(mci_dev->hw);
+				return false;
+			}
+		} while (!hri_sdhc_get_NISTR_TRFC_bit(mci_dev->hw));		// wait until transfer complete
+		hri_sdhc_set_NISTR_TRFC_bit(mci_dev->hw);
+	}
+#else
 	uint32_t nb_data;
 	uint8_t *ptr    = (uint8_t *)dst;
 	uint8_t  nbytes = 4;
@@ -592,6 +734,7 @@ bool _mci_sync_start_read_blocks(struct _mci_sync_device *const mci_dev, void *d
 		nb_data -= nbytes;
 		ptr += nbytes;
 	}
+#endif
 
 	return true;
 }
@@ -602,6 +745,50 @@ bool _mci_sync_start_read_blocks(struct _mci_sync_device *const mci_dev, void *d
  */
 bool _mci_sync_start_write_blocks(struct _mci_sync_device *const mci_dev, const void *src, uint16_t nb_block)
 {
+#if 1	//dc42 with thanks to alkgrove
+	if (nb_block != 0)
+	{
+		do
+		{
+			if (hri_sdhc_get_EISTR_reg(mci_dev->hw, SDHC_EISTR_DATTEO | SDHC_EISTR_DATCRC | SDHC_EISTR_DATEND))
+			{
+				_mci_reset(mci_dev->hw);
+				return false;
+			}
+		} while (!hri_sdhc_get_NISTR_BWRRDY_bit(mci_dev->hw));
+		hri_sdhc_set_NISTR_BWRRDY_bit(mci_dev->hw);
+
+		// Write data
+		// dc42 optimised the following loop by examining the assembler
+		const unsigned int numQuadWords = (nb_block * mci_dev->mci_sync_block_size) >> 3;
+		const uint32_t *p = (const uint32_t*)src;
+		do
+		{
+			uint32_t currentWord = *p++;
+			asm volatile("" ::: "memory");
+			while (!hri_sdhc_get_PSR_BUFWREN_bit(mci_dev->hw)) { }
+			hri_sdhc_write_BDPR_reg(mci_dev->hw, currentWord);
+			asm volatile("" ::: "memory");
+			currentWord = *p++;
+			asm volatile("" ::: "memory");
+			while (!hri_sdhc_get_PSR_BUFWREN_bit(mci_dev->hw)) { }
+			hri_sdhc_write_BDPR_reg(mci_dev->hw, currentWord);
+			asm volatile("" ::: "memory");
+		} while (p < (const uint32_t*)src + (2 * numQuadWords));
+
+
+		// Wait end of transfer
+		do
+		{
+			if (hri_sdhc_get_EISTR_reg(mci_dev->hw, SDHC_EISTR_DATTEO | SDHC_EISTR_DATCRC | SDHC_EISTR_DATEND))
+			{
+				_mci_reset(mci_dev->hw);
+				return false;
+			}
+		} while (!hri_sdhc_get_NISTR_TRFC_bit(mci_dev->hw));		// wait until transfer complete
+		hri_sdhc_set_NISTR_TRFC_bit(mci_dev->hw);
+	}
+#else
 	uint32_t nb_data;
 	uint8_t *ptr    = (uint8_t *)src;
 	uint8_t  nbytes = 4;
@@ -620,6 +807,7 @@ bool _mci_sync_start_write_blocks(struct _mci_sync_device *const mci_dev, const 
 		nb_data -= nbytes;
 		ptr += nbytes;
 	}
+#endif
 
 	return true;
 }

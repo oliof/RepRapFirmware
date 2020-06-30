@@ -90,7 +90,7 @@ inline void fastDigitalWriteLow(uint32_t pin) noexcept
 // Timer identifiers used in assigning PWM control devices
 enum class TcOutput : uint8_t
 {
-	// TC devices, on peripheral E for both SAME51 and SAMC21
+	// TC devices, on peripheral E for both SAME5x and SAMC21
 	tc0_0 = 0, tc0_1,
 	tc1_0, tc1_1,
 	tc2_0, tc2_1,
@@ -223,10 +223,10 @@ constexpr uint32_t SerialNumberAddresses[4] = { 0x008061FC, 0x00806010, 0x008060
 #include "Uart.h"
 typedef Uart UARTClass;
 
-extern Uart *serialUart0;
+extern Uart serialUart0;
 
 #include "SerialCDC.h"
 
-extern SerialCDC *serialUSB;
+extern SerialCDC serialUSB;
 
 #endif /* SRC_HARDWARE_SAME5X_COREIO_H_ */

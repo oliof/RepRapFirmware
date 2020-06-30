@@ -50,7 +50,7 @@
 #include "sd_mmc.h"
 #include "conf_sd_mmc.h"
 
-#if SAME5x
+#if defined(SAME5x) && SAME5x
 # include <peripheral_clk_config.h>
 #endif
 
@@ -189,8 +189,7 @@ bool hsmci_wait_end_of_write_blocks(void) noexcept
 
 uint32_t hsmci_get_speed(void) noexcept
 {
-	//TODO
-	return 0;
+	return mci_sync_get_speed(&mci);
 }
 
 driverIdleFunc_t hsmci_set_idle_func(driverIdleFunc_t func) noexcept

@@ -15,55 +15,58 @@
 
 constexpr uint32_t DiagBaudRate = 57600;		// the baud rate we use
 
+constexpr uint32_t SercomFastClock = GCLK_PCHCTRL_GEN_GCLK3;
+constexpr uint32_t SercomSlowClock = GCLK_PCHCTRL_GEN_GCLK1;
+
 void Serial::EnableSercomClock(uint8_t sercomNumber)
 {
 	switch (sercomNumber)
 	{
 	case 0:
 		MCLK->APBAMASK.reg |= MCLK_APBAMASK_SERCOM0;
-		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM0_GCLK_ID_CORE, GCLK_PCHCTRL_GEN_GCLK1 | GCLK_PCHCTRL_CHEN);
-		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM0_GCLK_ID_SLOW, GCLK_PCHCTRL_GEN_GCLK3 | GCLK_PCHCTRL_CHEN);
+		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM0_GCLK_ID_CORE, SercomFastClock | GCLK_PCHCTRL_CHEN);
+		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM0_GCLK_ID_SLOW, SercomSlowClock | GCLK_PCHCTRL_CHEN);
 		break;
 
 	case 1:
-		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM1_GCLK_ID_CORE, GCLK_PCHCTRL_GEN_GCLK1 | GCLK_PCHCTRL_CHEN);
-		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM1_GCLK_ID_SLOW, GCLK_PCHCTRL_GEN_GCLK3 | GCLK_PCHCTRL_CHEN);
+		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM1_GCLK_ID_CORE, SercomFastClock | GCLK_PCHCTRL_CHEN);
+		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM1_GCLK_ID_SLOW, SercomSlowClock | GCLK_PCHCTRL_CHEN);
 		MCLK->APBAMASK.reg |= MCLK_APBAMASK_SERCOM1;
 		break;
 
 	case 2:
-		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM2_GCLK_ID_CORE, GCLK_PCHCTRL_GEN_GCLK1 | GCLK_PCHCTRL_CHEN);
-		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM2_GCLK_ID_SLOW, GCLK_PCHCTRL_GEN_GCLK3 | GCLK_PCHCTRL_CHEN);
+		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM2_GCLK_ID_CORE, SercomFastClock | GCLK_PCHCTRL_CHEN);
+		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM2_GCLK_ID_SLOW, SercomSlowClock | GCLK_PCHCTRL_CHEN);
 		MCLK->APBBMASK.reg |= MCLK_APBBMASK_SERCOM2;
 		break;
 
 	case 3:
-		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM3_GCLK_ID_CORE, GCLK_PCHCTRL_GEN_GCLK1 | GCLK_PCHCTRL_CHEN);
-		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM3_GCLK_ID_SLOW, GCLK_PCHCTRL_GEN_GCLK3 | GCLK_PCHCTRL_CHEN);
+		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM3_GCLK_ID_CORE, SercomFastClock | GCLK_PCHCTRL_CHEN);
+		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM3_GCLK_ID_SLOW, SercomSlowClock | GCLK_PCHCTRL_CHEN);
 		MCLK->APBBMASK.reg |= MCLK_APBBMASK_SERCOM3;
 		break;
 
 	case 4:
-		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM4_GCLK_ID_CORE, GCLK_PCHCTRL_GEN_GCLK1 | GCLK_PCHCTRL_CHEN);
-		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM4_GCLK_ID_SLOW, GCLK_PCHCTRL_GEN_GCLK3 | GCLK_PCHCTRL_CHEN);
+		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM4_GCLK_ID_CORE, SercomFastClock | GCLK_PCHCTRL_CHEN);
+		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM4_GCLK_ID_SLOW, SercomSlowClock | GCLK_PCHCTRL_CHEN);
 		MCLK->APBDMASK.reg |= MCLK_APBDMASK_SERCOM4;
 		break;
 
 	case 5:
-		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM5_GCLK_ID_CORE, GCLK_PCHCTRL_GEN_GCLK1 | GCLK_PCHCTRL_CHEN);
-		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM5_GCLK_ID_SLOW, GCLK_PCHCTRL_GEN_GCLK3 | GCLK_PCHCTRL_CHEN);
+		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM5_GCLK_ID_CORE, SercomFastClock | GCLK_PCHCTRL_CHEN);
+		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM5_GCLK_ID_SLOW, SercomSlowClock | GCLK_PCHCTRL_CHEN);
 		MCLK->APBDMASK.reg |= MCLK_APBDMASK_SERCOM5;
 		break;
 
 	case 6:
-		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM6_GCLK_ID_CORE, GCLK_PCHCTRL_GEN_GCLK1 | GCLK_PCHCTRL_CHEN);
-		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM6_GCLK_ID_SLOW, GCLK_PCHCTRL_GEN_GCLK3 | GCLK_PCHCTRL_CHEN);
+		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM6_GCLK_ID_CORE, SercomFastClock | GCLK_PCHCTRL_CHEN);
+		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM6_GCLK_ID_SLOW, SercomSlowClock | GCLK_PCHCTRL_CHEN);
 		MCLK->APBDMASK.reg |= MCLK_APBDMASK_SERCOM6;
 		break;
 
 	case 7:
-		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM7_GCLK_ID_CORE, GCLK_PCHCTRL_GEN_GCLK1 | GCLK_PCHCTRL_CHEN);
-		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM7_GCLK_ID_SLOW, GCLK_PCHCTRL_GEN_GCLK3 | GCLK_PCHCTRL_CHEN);
+		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM7_GCLK_ID_CORE, SercomFastClock | GCLK_PCHCTRL_CHEN);
+		hri_gclk_write_PCHCTRL_reg(GCLK, SERCOM7_GCLK_ID_SLOW, SercomSlowClock | GCLK_PCHCTRL_CHEN);
 		MCLK->APBDMASK.reg |= MCLK_APBDMASK_SERCOM7;
 		break;
 
@@ -73,7 +76,7 @@ void Serial::EnableSercomClock(uint8_t sercomNumber)
 }
 
 // Initialise the serial port. This does not set up the I/O pins.
-void Serial::InitUart(uint8_t sercomNumber, uint32_t baudRate, uint8_t rxPad)
+void Serial::InitUart(uint8_t sercomNumber, uint32_t baudRate, uint8_t rxPad, bool use32bitMode)
 {
 	EnableSercomClock(sercomNumber);
 	Sercom * const sercom = GetSercom(sercomNumber);
@@ -107,7 +110,7 @@ void Serial::InitUart(uint8_t sercomNumber, uint32_t baudRate, uint8_t rxPad)
 
 	sercom->USART.CTRLA.reg = ctrla;
 	sercom->USART.CTRLB.reg = SERCOM_USART_CTRLB_TXEN | SERCOM_USART_CTRLB_RXEN;
-	sercom->USART.CTRLC.reg = 0u;
+	sercom->USART.CTRLC.reg = (use32bitMode) ? SERCOM_USART_CTRLC_DATA32B(3) : 0u;
 	const uint32_t baudReg = 65536u - (((uint64_t)65536 * 16 * baudRate)/SystemPeripheralClock);
 	sercom->USART.BAUD.reg = baudReg;
 	hri_sercomusart_set_CTRLA_ENABLE_bit(sercom);

@@ -434,7 +434,9 @@ void Platform::Init() noexcept
 	baudRates[0] = MAIN_BAUD_RATE;
 	commsParams[0] = 0;
 	usbMutex.Create("USB");
-#if defined(__LPC17xx__)
+#if SAME5x
+    SERIAL_MAIN_DEVICE.Start();
+#elif defined(__LPC17xx__)
 	SERIAL_MAIN_DEVICE.begin(baudRates[0]);
 #else
     SERIAL_MAIN_DEVICE.Start(UsbVBusPin);
@@ -446,6 +448,10 @@ void Platform::Init() noexcept
 	auxMutex.Create("Aux");
 	auxEnabled = auxRaw = false;
 	auxSeq = 0;
+#endif
+
+#ifdef DUET_5LC
+	EnableAux();			//TODO temporary!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #endif
 
 #ifdef SERIAL_AUX2_DEVICE
@@ -518,6 +524,8 @@ void Platform::Init() noexcept
 	numSmartDrivers = MaxSmartDrivers;
 # elif defined(DUET3)
 	numSmartDrivers = MaxSmartDrivers;
+# elif defined(DUET_5LC)
+	numSmartDrivers = MaxSmartDrivers;							// support the expansion board, but don't mind if it's missing
 # endif
 #endif
 
@@ -680,8 +688,12 @@ void Platform::Init() noexcept
 # if SUPPORT_TMC51xx
 	SmartDrivers::Init();
 # elif SUPPORT_TMC22xx
+#  if TMC22xx_VARIABLE_NUM_DRIVERS
 	SmartDrivers::Init(numSmartDrivers);
-#else
+#  else
+	SmartDrivers::Init();
+#  endif
+# else
 	SmartDrivers::Init(ENABLE_PINS, numSmartDrivers);
 # endif
 	temperatureShutdownDrivers.Clear();
@@ -717,7 +729,7 @@ void Platform::Init() noexcept
 	// Initialise the configured heaters to just the default bed heater (there are no default chamber heaters)
 	configuredHeaters.Clear();
 
-#ifndef DUET3
+#if !defined(DUET3) && !defined(DUET_5LC)
 	if (DefaultBedHeater >= 0)
 	{
 		configuredHeaters.SetBit(DefaultBedHeater);
@@ -765,7 +777,15 @@ void Platform::Init() noexcept
 #endif
 
 #if HAS_CPU_TEMP_SENSOR
+# if SAME5x
+	tpFilter.Init(0);
+	AnalogIn::EnableTemperatureSensor(0, tpFilter.CallbackFeedIntoFilter, &tpFilter, 1, 0);
+	tcFilter.Init(0);
+	AnalogIn::EnableTemperatureSensor(1, tcFilter.CallbackFeedIntoFilter, &tcFilter, 1, 0);
+	TemperatureCalibrationInit();
+# else
 	filteredAdcChannels[CpuTempFilterIndex] = GetTemperatureAdcChannel();
+# endif
 #endif
 
 	// Initialise all the ADC filters and enable the corresponding ADC channels
@@ -781,8 +801,8 @@ void Platform::Init() noexcept
 
 #if HAS_CPU_TEMP_SENSOR
 	// MCU temperature monitoring
-	highestMcuTemperature = 0;									// the highest output we have seen from the ADC filter
-	lowestMcuTemperature = 4095 * ThermistorAverageReadings;	// the lowest output we have seen from the ADC filter
+	highestMcuTemperature = -273.0;									// the highest temperature we have seen
+	lowestMcuTemperature = 2000.0;									// the lowest temperature we have seen
 	mcuTemperatureAdjust = 0.0;
 #endif
 
@@ -956,9 +976,7 @@ void Platform::Exit() noexcept
 	usbOutput.ReleaseAll();
 
 #ifdef SERIAL_AUX_DEVICE
-# ifdef DUET3
 	if (auxEnabled)
-# endif
 	{
 		SERIAL_AUX_DEVICE.end();
 	}
@@ -1118,9 +1136,9 @@ void Platform::Spin() noexcept
 		return;
 	}
 
-#if defined(DUET3) || defined(__LPC17xx__)
+#if defined(DUET3) || defined(DUET_5LC) || defined(__LPC17xx__)
 	// Blink the LED at about 2Hz. Duet 3 expansion boards will blink in sync when they have established clock sync with us.
-	digitalWrite(DiagPin, (StepTimer::GetTimerTicks() & (1u << 19)) != 0);
+	digitalWrite(DiagPin, XNor(DiagOnPolarity, StepTimer::GetTimerTicks() & (1u << 19)) != 0);
 #endif
 
 #if HAS_MASS_STORAGE
@@ -1132,9 +1150,13 @@ void Platform::Spin() noexcept
 
 	// Check the MCU max and min temperatures
 #if HAS_CPU_TEMP_SENSOR
+# if SAME5x
+	if (tcFilter.IsValid() && tpFilter.IsValid())
+# else
 	if (adcFilters[CpuTempFilterIndex].IsValid())
+# endif
 	{
-		const uint32_t currentMcuTemperature = adcFilters[CpuTempFilterIndex].GetSum();
+		const float currentMcuTemperature = GetCpuTemperature();
 		if (currentMcuTemperature > highestMcuTemperature)
 		{
 			highestMcuTemperature= currentMcuTemperature;
@@ -1593,19 +1615,31 @@ bool Platform::GetAutoSaveSettings(float& saveVoltage, float&resumeVoltage) noex
 
 #endif
 
-#if HAS_CPU_TEMP_SENSOR && !SAME5x
+#if HAS_CPU_TEMP_SENSOR
 
-float Platform::AdcReadingToCpuTemperature(uint32_t adcVal) const noexcept
+float Platform::GetCpuTemperature() const noexcept
 {
-	const float voltage = (float)adcVal * (3.3/(float)((1u << AdcBits) * ThermistorAverageReadings));
-#if SAM4E || SAM4S
-	return (voltage - 1.44) * (1000.0/4.7) + 27.0 + mcuTemperatureAdjust;			// accuracy at 27C is +/-13C
-#elif SAM3XA
-	return (voltage - 0.8) * (1000.0/2.65) + 27.0 + mcuTemperatureAdjust;			// accuracy at 27C is +/-45C
-#elif SAME70
-	return (voltage - 0.72) * (1000.0/2.33) + 25.0 + mcuTemperatureAdjust;			// accuracy at 25C is +/-34C
+#if SAME5x
+	// From the datasheet:
+	// T = (tl * vph * tc - th * vph * tc - tl * tp *vch + th * tp * vcl)/(tp * vcl - tp * vch - tc * vpl * tc * vph)
+	const uint16_t tc_result = tcFilter.GetSum()/(tcFilter.NumAveraged() << (AnalogIn::AdcBits - 12));
+	const uint16_t tp_result = tpFilter.GetSum()/(tpFilter.NumAveraged() << (AnalogIn::AdcBits - 12));
+
+	int32_t result =  (tempCalF1 * tc_result - tempCalF2 * tp_result);
+	const int32_t divisor = (tempCalF3 * tp_result - tempCalF4 * tc_result);
+	result = (divisor == 0) ? 0 : result/divisor;
+	return (float)result/16 + mcuTemperatureAdjust;
 #else
-# error undefined CPU temp conversion
+	const float voltage = (float)adcFilters[CpuTempFilterIndex].GetSum() * (3.3/(float)((1u << AdcBits) * ThermistorAverageReadings));
+# if SAM4E || SAM4S
+	return (voltage - 1.44) * (1000.0/4.7) + 27.0 + mcuTemperatureAdjust;			// accuracy at 27C is +/-13C
+# elif SAM3XA
+	return (voltage - 0.8) * (1000.0/2.65) + 27.0 + mcuTemperatureAdjust;			// accuracy at 27C is +/-45C
+# elif SAME70
+	return (voltage - 0.72) * (1000.0/2.33) + 25.0 + mcuTemperatureAdjust;			// accuracy at 25C is +/-34C
+# else
+#  error undefined CPU temp conversion
+# endif
 #endif
 }
 
@@ -1626,15 +1660,17 @@ void Platform::InitialiseInterrupts() noexcept
 
 	// Set PanelDue UART interrupt priority
 #ifdef SERIAL_AUX_DEVICE
+# if SAME5x
+	SERIAL_AUX_DEVICE.setInterruptPriority(NvicPriorityPanelDueUartRx, NvicPriorityPanelDueUartTx);
+# else
 	SERIAL_AUX_DEVICE.setInterruptPriority(NvicPriorityPanelDueUart);
+# endif
 #endif
 #ifdef SERIAL_AUX2_DEVICE
 	SERIAL_AUX2_DEVICE.setInterruptPriority(NvicPriorityPanelDueUart);
 #endif
 
-#if HAS_WIFI_NETWORKING
-	NVIC_SetPriority(UART1_IRQn, NvicPriorityWiFiUart);			// set priority for WiFi UART interrupt
-#endif
+// WiFi UART interrupt priority is now set in module WiFiInterface
 
 #if SUPPORT_TMC22xx && !SAME5x											// SAME5x uses a DMA interrupt instead of the UART interrupt
 # if TMC22xx_HAS_MUX
@@ -1681,7 +1717,9 @@ void Platform::InitialiseInterrupts() noexcept
 
 #if SAME5x
 	NVIC_SetPriority(USB_0_IRQn, NvicPriorityUSB);
-	//TODO do we need the other 3 USB interrupts?
+	NVIC_SetPriority(USB_1_IRQn, NvicPriorityUSB);
+	NVIC_SetPriority(USB_2_IRQn, NvicPriorityUSB);
+	NVIC_SetPriority(USB_3_IRQn, NvicPriorityUSB);
 #elif SAME70
 	NVIC_SetPriority(USBHS_IRQn, NvicPriorityUSB);
 #elif SAM4E || SAM4S
@@ -1889,9 +1927,9 @@ void Platform::Diagnostics(MessageType mtype) noexcept
 
 #if HAS_CPU_TEMP_SENSOR
 	// Show the MCU temperatures
-	const uint32_t currentMcuTemperature = adcFilters[CpuTempFilterIndex].GetSum();
+	const float currentMcuTemperature = GetCpuTemperature();
 	MessageF(mtype, "MCU temperature: min %.1f, current %.1f, max %.1f\n",
-		(double)AdcReadingToCpuTemperature(lowestMcuTemperature), (double)AdcReadingToCpuTemperature(currentMcuTemperature), (double)AdcReadingToCpuTemperature(highestMcuTemperature));
+		(double)lowestMcuTemperature, (double)currentMcuTemperature, (double)highestMcuTemperature);
 	lowestMcuTemperature = highestMcuTemperature = currentMcuTemperature;
 #endif
 
@@ -1915,7 +1953,7 @@ void Platform::Diagnostics(MessageType mtype) noexcept
 	// Show the motor stall status
 	for (size_t drive = 0; drive < numSmartDrivers; ++drive)
 	{
-		String<MediumStringLength> driverStatus;
+		String<StringLength256> driverStatus;
 		SmartDrivers::AppendDriverStatus(drive, driverStatus.GetRef());
 		MessageF(mtype, "Driver %u:%s\n", drive, driverStatus.c_str());
 	}
@@ -2002,7 +2040,7 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 				float tempMinMax[2];
 				size_t numTemps = 2;
 				gb.GetFloatArray(tempMinMax, numTemps, false);
-				const float currentMcuTemperature = AdcReadingToCpuTemperature(adcFilters[CpuTempFilterIndex].GetSum());
+				const float currentMcuTemperature = GetCpuTemperature();
 				if (currentMcuTemperature < tempMinMax[0])
 				{
 					buf->lcatf("MCU temperature %.1f is lower than expected", (double)currentMcuTemperature);
@@ -3697,7 +3735,9 @@ void Platform::ResetChannel(size_t chan) noexcept
 	{
 	case 0:
 		SERIAL_MAIN_DEVICE.end();
-#if defined(__LPC17xx__)
+#if SAME5x
+        SERIAL_MAIN_DEVICE.Start();
+#elif defined(__LPC17xx__)
 		SERIAL_MAIN_DEVICE.begin(baudRates[0]);
 #else
         SERIAL_MAIN_DEVICE.Start(UsbVBusPin);
@@ -3731,7 +3771,13 @@ void Platform::SetBoardType(BoardType bt) noexcept
 	if (bt == BoardType::Auto)
 	{
 #if defined(DUET_5LC)
-		board = DEFAULT_BOARD_TYPE;
+		// Test whether this is a WiFi or an Ethernet board. Currently we do this based on the processor type.
+		const uint16_t deviceId = DSU->DID.reg >> 16;
+		board = (deviceId == 0x6184)						// if SAME54P20A
+				? BoardType::Duet5LC_Ethernet
+				: (deviceId == 0x6006)						// SAMD51P20A rev D
+				  ? BoardType::Duet5LC_WiFi
+					: BoardType::Duet5LC_Unknown;
 #elif defined(DUET3)
 		// Driver 0 direction has a pulldown resistor on v0.6 and v1.0 boards, but won't on v1.01 boards
 		pinMode(DIRECTION_PINS[0], INPUT_PULLUP);
@@ -3807,7 +3853,9 @@ const char* Platform::GetElectronicsString() const noexcept
 	switch (board)
 	{
 #if defined(DUET_5LC)
-	case BoardType::Duet5LC_v02:			return "Duet 3 " BOARD_SHORT_NAME "v0.2";
+	case BoardType::Duet5LC_Unknown:		return "Duet 3 " BOARD_SHORT_NAME " unknown variant";
+	case BoardType::Duet5LC_WiFi:			return "Duet 3 " BOARD_SHORT_NAME " WiFi";
+	case BoardType::Duet5LC_Ethernet:		return "Duet 3 " BOARD_SHORT_NAME " Ethernet";
 #elif defined(DUET3)
 	case BoardType::Duet3_v06_100:			return "Duet 3 " BOARD_SHORT_NAME " v0.6 or 1.0";
 	case BoardType::Duet3_v101:				return "Duet 3 " BOARD_SHORT_NAME " v1.01 or later";
@@ -3849,7 +3897,9 @@ const char* Platform::GetBoardString() const noexcept
 	switch (board)
 	{
 #if defined(DUET_5LC)
-	case BoardType::Duet5LC_v02:			return "duet5lc02";
+	case BoardType::Duet5LC_Unknown:		return "duet5lcunknown";
+	case BoardType::Duet5LC_WiFi:			return "duet5lcwifi";
+	case BoardType::Duet5LC_Ethernet:		return "duet5lcethernet";
 #elif defined(DUET3)
 	case BoardType::Duet3_v06_100:			return "duet3mb6hc100";
 	case BoardType::Duet3_v101:				return "duet3mb6hc101";
@@ -3905,6 +3955,16 @@ const char *Platform::GetBoardShortName() const noexcept
 	return (board == BoardType::Duet2SBC_10 || board == BoardType::Duet2SBC_102)
 			? BOARD_SHORT_NAME_SBC
 			: (IsDuetWiFi()) ? BOARD_SHORT_NAME_WIFI : BOARD_SHORT_NAME_ETHERNET;
+}
+
+#endif
+
+#ifdef DUET_5LC
+
+// Return true if this is a Duet WiFi, false if it is a Duet Ethernet
+bool Platform::IsDuetWiFi() const noexcept
+{
+	return board == BoardType::Duet5LC_WiFi || board == BoardType::Duet5LC_Unknown;
 }
 
 #endif
@@ -4117,9 +4177,9 @@ bool Platform::Inkjet(int bitPattern) noexcept
 MinMaxCurrent Platform::GetMcuTemperatures() const noexcept
 {
 	MinMaxCurrent result;
-	result.min = AdcReadingToCpuTemperature(lowestMcuTemperature);
-	result.current = AdcReadingToCpuTemperature(adcFilters[CpuTempFilterIndex].GetSum());
-	result.max = AdcReadingToCpuTemperature(highestMcuTemperature);
+	result.min = lowestMcuTemperature;
+	result.current = GetCpuTemperature();
+	result.max = highestMcuTemperature;
 	return result;
 }
 
@@ -4490,6 +4550,57 @@ uint32_t Platform::Random() noexcept
 {
 	const uint32_t clocks = StepTimer::GetTimerTicks();
 	return clocks ^ uniqueId[0] ^ uniqueId[1] ^ uniqueId[2] ^ uniqueId[3];
+}
+
+#endif
+
+#if HAS_CPU_TEMP_SENSOR && SAME5x
+
+void Platform::TemperatureCalibrationInit() noexcept
+{
+	// Temperature sense stuff
+	constexpr uint32_t NVM_TEMP_CAL_TLI_POS = 0;
+	constexpr uint32_t NVM_TEMP_CAL_TLI_SIZE = 8;
+	constexpr uint32_t NVM_TEMP_CAL_TLD_POS = 8;
+	constexpr uint32_t NVM_TEMP_CAL_TLD_SIZE = 4;
+	constexpr uint32_t NVM_TEMP_CAL_THI_POS = 12;
+	constexpr uint32_t NVM_TEMP_CAL_THI_SIZE = 8;
+	constexpr uint32_t NVM_TEMP_CAL_THD_POS = 20;
+	constexpr uint32_t NVM_TEMP_CAL_THD_SIZE = 4;
+	constexpr uint32_t NVM_TEMP_CAL_VPL_POS = 40;
+	constexpr uint32_t NVM_TEMP_CAL_VPL_SIZE = 12;
+	constexpr uint32_t NVM_TEMP_CAL_VPH_POS = 52;
+	constexpr uint32_t NVM_TEMP_CAL_VPH_SIZE = 12;
+	constexpr uint32_t NVM_TEMP_CAL_VCL_POS = 64;
+	constexpr uint32_t NVM_TEMP_CAL_VCL_SIZE = 12;
+	constexpr uint32_t NVM_TEMP_CAL_VCH_POS = 76;
+	constexpr uint32_t NVM_TEMP_CAL_VCH_SIZE = 12;
+
+	const uint16_t temp_cal_vpl = (*((uint32_t *)(NVMCTRL_TEMP_LOG) + (NVM_TEMP_CAL_VPL_POS / 32)) >> (NVM_TEMP_CAL_VPL_POS % 32))
+	               & ((1u << NVM_TEMP_CAL_VPL_SIZE) - 1);
+	const uint16_t temp_cal_vph = (*((uint32_t *)(NVMCTRL_TEMP_LOG) + (NVM_TEMP_CAL_VPH_POS / 32)) >> (NVM_TEMP_CAL_VPH_POS % 32))
+	               & ((1u << NVM_TEMP_CAL_VPH_SIZE) - 1);
+	const uint16_t temp_cal_vcl = (*((uint32_t *)(NVMCTRL_TEMP_LOG) + (NVM_TEMP_CAL_VCL_POS / 32)) >> (NVM_TEMP_CAL_VCL_POS % 32))
+	               & ((1u << NVM_TEMP_CAL_VCL_SIZE) - 1);
+	const uint16_t temp_cal_vch = (*((uint32_t *)(NVMCTRL_TEMP_LOG) + (NVM_TEMP_CAL_VCH_POS / 32)) >> (NVM_TEMP_CAL_VCH_POS % 32))
+	               & ((1u << NVM_TEMP_CAL_VCH_SIZE) - 1);
+
+	const uint8_t temp_cal_tli = (*((uint32_t *)(NVMCTRL_TEMP_LOG) + (NVM_TEMP_CAL_TLI_POS / 32)) >> (NVM_TEMP_CAL_TLI_POS % 32))
+	               & ((1u << NVM_TEMP_CAL_TLI_SIZE) - 1);
+	const uint8_t temp_cal_tld = (*((uint32_t *)(NVMCTRL_TEMP_LOG) + (NVM_TEMP_CAL_TLD_POS / 32)) >> (NVM_TEMP_CAL_TLD_POS % 32))
+	               & ((1u << NVM_TEMP_CAL_TLD_SIZE) - 1);
+	const uint16_t temp_cal_tl = ((uint16_t)temp_cal_tli) << 4 | ((uint16_t)temp_cal_tld);
+
+	const uint8_t temp_cal_thi = (*((uint32_t *)(NVMCTRL_TEMP_LOG) + (NVM_TEMP_CAL_THI_POS / 32)) >> (NVM_TEMP_CAL_THI_POS % 32))
+	               & ((1u << NVM_TEMP_CAL_THI_SIZE) - 1);
+	const uint8_t temp_cal_thd = (*((uint32_t *)(NVMCTRL_TEMP_LOG) + (NVM_TEMP_CAL_THD_POS / 32)) >> (NVM_TEMP_CAL_THD_POS % 32))
+	               & ((1u << NVM_TEMP_CAL_THD_SIZE) - 1);
+	const uint16_t temp_cal_th = ((uint16_t)temp_cal_thi) << 4 | ((uint16_t)temp_cal_thd);
+
+	tempCalF1 = (int32_t)temp_cal_tl * (int32_t)temp_cal_vph - (int32_t)temp_cal_th * (int32_t)temp_cal_vpl;
+	tempCalF2 = (int32_t)temp_cal_tl * (int32_t)temp_cal_vch - (int32_t)temp_cal_th * (int32_t)temp_cal_vcl;
+	tempCalF3 = (int32_t)temp_cal_vcl - (int32_t)temp_cal_vch;
+	tempCalF4 = (int32_t)temp_cal_vpl - (int32_t)temp_cal_vph;
 }
 
 #endif

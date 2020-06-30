@@ -300,8 +300,8 @@ bool AdcClass::StartConversion(TaskBase *p_taskToWake)
 		dmaFinishedReason = DmaCallbackReason::none;
 		DmacManager::EnableCompletedInterrupt(dmaChan + 1);
 
-		DmacManager::EnableChannel(dmaChan + 1, AdcRxDmaPriority);
-		DmacManager::EnableChannel(dmaChan, AdcTxDmaPriority);
+		DmacManager::EnableChannel(dmaChan + 1, DmacPrioAdcRx);
+		DmacManager::EnableChannel(dmaChan, DmacPrioAdcTx);
 
 		state = State::converting;
 		++conversionsStarted;
@@ -353,8 +353,8 @@ void AdcClass::ResultReadyCallback(DmaCallbackReason reason)
 // ADC instances
 static AdcClass Adcs[] =
 {
-	AdcClass(ADC0, ADC0_0_IRQn, Adc0TxDmaChannel, DmaTrigSource::adc0_resrdy),
-	AdcClass(ADC1, ADC1_0_IRQn, Adc1TxDmaChannel, DmaTrigSource::adc1_resrdy)
+	AdcClass(ADC0, ADC0_0_IRQn, DmacChanAdc0Tx, DmaTrigSource::adc0_resrdy),
+	AdcClass(ADC1, ADC1_0_IRQn, DmacChanAdc1Tx, DmaTrigSource::adc1_resrdy)
 };
 
 namespace AnalogIn
@@ -406,16 +406,9 @@ void AnalogIn::Init()
 {
 	// Enable ADC clocks
 	hri_mclk_set_APBDMASK_ADC0_bit(MCLK);
-	hri_gclk_write_PCHCTRL_reg(GCLK, ADC0_GCLK_ID, GCLK_PCHCTRL_GEN_GCLK1_Val | (1 << GCLK_PCHCTRL_CHEN_Pos));
+	hri_gclk_write_PCHCTRL_reg(GCLK, ADC0_GCLK_ID, GCLK_PCHCTRL_GEN_GCLK3_Val | (1 << GCLK_PCHCTRL_CHEN_Pos));
 	hri_mclk_set_APBDMASK_ADC1_bit(MCLK);
-	hri_gclk_write_PCHCTRL_reg(GCLK, ADC1_GCLK_ID, GCLK_PCHCTRL_GEN_GCLK1_Val | (1 << GCLK_PCHCTRL_CHEN_Pos));
-
-#if 0
-	// Set the supply controller to on-demand mode so that we can get at both temperature sensors
-	hri_supc_set_VREF_ONDEMAND_bit(SUPC);
-	hri_supc_set_VREF_TSEN_bit(SUPC);
-	hri_supc_clear_VREF_VREFOE_bit(SUPC);
-#endif
+	hri_gclk_write_PCHCTRL_reg(GCLK, ADC1_GCLK_ID, GCLK_PCHCTRL_GEN_GCLK3_Val | (1 << GCLK_PCHCTRL_CHEN_Pos));
 
 	analogInTask.Create(AinLoop, "AIN", nullptr, TaskPriority::AinPriority);
 }
@@ -466,10 +459,18 @@ uint16_t AnalogIn::ReadChannel(AdcInput adcin)
 }
 
 // Enable an on-chip MCU temperature sensor
+// From the SAME5x-E5x errata document version K:
+// 2.23.1 Temperature Sensor
+// Both internal temperature sensors, TSENSP and TSENSC, are not supported and should not be used.
+// Workaround: None
+// Affected Silicon Revisions: A, D
 bool AnalogIn::EnableTemperatureSensor(unsigned int sensorNumber, AnalogInCallbackFunction fn, CallbackParameter param, uint32_t ticksPerCall, unsigned int adcnum)
 {
 	if (adcnum < ARRAY_SIZE(Adcs))
 	{
+		// Set the supply controller to on-demand mode so that we can get at both temperature sensors
+		SUPC->VREF.reg |= (SUPC_VREF_ONDEMAND | SUPC_VREF_TSEN | SUPC_VREF_VREFOE);
+
 		return Adcs[adcnum].EnableTemperatureSensor(sensorNumber, fn, param, ticksPerCall);
 	}
 	return false;

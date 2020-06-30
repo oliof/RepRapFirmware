@@ -24,14 +24,17 @@ const uint8_t memPattern = 0xA5;
 
 extern "C" char *sbrk(int i);
 extern char _end;						// defined in linker script
-extern uint32_t _firmware_crc;			// defined in linker script
 extern uint32_t _estack;				// defined in linker script
+
+#ifndef DEBUG
+extern uint32_t _firmware_crc;			// defined in linker script
+#endif
 
 // MAIN task data
 // The main task currently runs GCodes, so it needs to be large enough to hold the matrices used for delta auto calibration.
 // The worst case stack usage is after running delta auto calibration with Move debugging enabled.
 // The timer and idle tasks currently never do I/O, so they can be much smaller.
-#if SAME70
+#if SAME70 || SAME5x
 constexpr unsigned int MainTaskStackWords = 1800;			// on the SAME70 we use matrices of doubles
 #elif defined(__LPC17xx__)
 constexpr unsigned int MainTaskStackWords = 1110-(16*9);	// LPC builds only support 16 calibration points, so less space needed
@@ -114,7 +117,8 @@ extern "C" [[noreturn]] void AppMain() noexcept
 			// CRC failed so flash the diagnostic LED 3 times, pause and repeat. This is the same error code used by the Duet 3 expansion boards bootloader.
 			for (unsigned int i = 0; ; ++i)
 			{
-				digitalWrite(DiagPin, (i & 1) == 0 && (i & 15) < 6);		// turn LED on if count is 0, 2, 4 or 16, 18, 20 etc. otherwise turn it off
+				const bool on = (i & 1) == 0 && (i & 15) < 6;				// turn LED on if count is 0, 2, 4 or 16, 18, 20 etc. otherwise turn it off
+				digitalWrite(DiagPin, XNor(on, DiagOnPolarity));
 				for (unsigned int j = 0; j < 500; ++j)
 				{
 					delayMicroseconds(1000);								// delayMicroseconds only works with low values of delay so do 1ms at a time
@@ -133,7 +137,8 @@ extern "C" [[noreturn]] void AppMain() noexcept
 	}
 
 #if SAME5x
-# ifndef DEBUG
+# if 0		// disable the bootloader protection code until we have a bootloader
+//# ifndef DEBUG
 	// Check that the bootloader is protected and EEPROM is configured
 	uint64_t nvmUserRow0 = *reinterpret_cast<const uint64_t*>(NVMCTRL_USER);						// we only need values in the first 64 bits of the user area
 	constexpr uint64_t mask =     ((uint64_t)0x0F << 32) | ((uint64_t)0x07 << 36) | (0x0F << 26);	// we just want NVM_BOOT (bits 26-29), SEE.SBLK (bits 32-35) and SEE.PSZ (bits 36:38)

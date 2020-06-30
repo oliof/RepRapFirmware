@@ -1,44 +1,13 @@
-/**
- * \file
+/*
+ * GmacInterface.cpp
  *
- * \brief GMAC (Gigabit MAC) driver for lwIP.
- *
- * Copyright (c) 2015-2018 Microchip Technology Inc. and its subsidiaries.
- *
- * \asf_license_start
- *
- * \page License
- *
- * Subject to your compliance with these terms, you may use Microchip
- * software and any derivatives exclusively with Microchip products.
- * It is your responsibility to comply with third party license terms applicable
- * to your use of third party software (including open source software) that
- * may accompany Microchip software.
- *
- * THIS SOFTWARE IS SUPPLIED BY MICROCHIP "AS IS". NO WARRANTIES,
- * WHETHER EXPRESS, IMPLIED OR STATUTORY, APPLY TO THIS SOFTWARE,
- * INCLUDING ANY IMPLIED WARRANTIES OF NON-INFRINGEMENT, MERCHANTABILITY,
- * AND FITNESS FOR A PARTICULAR PURPOSE. IN NO EVENT WILL MICROCHIP BE
- * LIABLE FOR ANY INDIRECT, SPECIAL, PUNITIVE, INCIDENTAL OR CONSEQUENTIAL
- * LOSS, DAMAGE, COST OR EXPENSE OF ANY KIND WHATSOEVER RELATED TO THE
- * SOFTWARE, HOWEVER CAUSED, EVEN IF MICROCHIP HAS BEEN ADVISED OF THE
- * POSSIBILITY OR THE DAMAGES ARE FORESEEABLE.  TO THE FULLEST EXTENT
- * ALLOWED BY LAW, MICROCHIP'S TOTAL LIABILITY ON ALL CLAIMS IN ANY WAY
- * RELATED TO THIS SOFTWARE WILL NOT EXCEED THE AMOUNT OF FEES, IF ANY,
- * THAT YOU HAVE PAID DIRECTLY TO MICROCHIP FOR THIS SOFTWARE.
- *
- * \asf_license_stop
- *
+ *  Created on: 19 Jun 2020
+ *      Author: David
  */
 
-#include "same70_gmac.h"
-
-#if defined(SAME70) && SAME70
-#include "pmc/pmc.h"
-#endif
-
-#include "conf_eth.h"
-#include <cstring>
+#include <Core.h>
+#include "GmacInterface.h"
+#include "gmac.h"
 
 extern "C" {
 #include "ksz8081rna/ethernet_phy.h"
@@ -52,11 +21,7 @@ extern "C" {
 #include "netif/etharp.h"
 }
 
-#define __nocache	__attribute__((section(".ram_nocache")))
-
-extern void delay(uint32_t ms);
-
-// We can't #include RepRapFirmware.h here because that leads to a duplicate definition of ERR_TIMEOUT
+#include <RepRapFirmware.h>
 #include <RTOSIface/RTOSIface.h>
 #include <TaskPriorities.h>
 
@@ -95,10 +60,13 @@ unsigned int txBufferTooShortCount;
 /** The GMAC RX errors to handle */
 #define GMAC_RX_ERRORS (GMAC_RSR_RXOVR | GMAC_RSR_HNO)
 
+#if 0
 /** TX descriptor lists */
 alignas(8) static gmac_tx_descriptor_t gs_tx_desc_null;
 /** RX descriptors lists */
 alignas(8) static gmac_rx_descriptor_t gs_rx_desc_null;
+#endif
+
 /**
  * GMAC driver structure.
  */
@@ -224,7 +192,7 @@ static void gmac_rx_populate_queue(struct gmac_device *p_gmac_dev, uint32_t star
 
 			LWIP_DEBUGF(NETIF_DEBUG,
 					("gmac_rx_populate_queue: new pbuf allocated: %p [idx=%u]\n",
-					p, ul_index));
+					p, (unsigned int)ul_index));
 		}
 
 		++ul_index;
@@ -425,7 +393,7 @@ static err_t gmac_low_level_output(netif *p_netif, struct pbuf *p) noexcept
 
 	LWIP_DEBUGF(NETIF_DEBUG,
 			("gmac_low_level_output: DMA buffer sent, size=%d [idx=%u]\n",
-			p->tot_len, ps_gmac_dev->us_tx_idx));
+			p->tot_len, (unsigned int)ps_gmac_dev->us_tx_idx));
 
 	ps_gmac_dev->us_tx_idx = (ps_gmac_dev->us_tx_idx + 1) % GMAC_TX_BUFFERS;
 
@@ -501,7 +469,7 @@ static pbuf *gmac_low_level_input(struct netif *netif) noexcept
 
 		LWIP_DEBUGF(NETIF_DEBUG,
 				("gmac_low_level_input: DMA buffer %p received, size=%u [idx=%u]\n",
-				p, length, ps_gmac_dev->us_rx_idx));
+				p, (unsigned int)length, (unsigned int)ps_gmac_dev->us_rx_idx));
 
 		/* Set pbuf total packet size. */
 		p->tot_len = length;
@@ -644,10 +612,19 @@ err_t ethernetif_init(struct netif *netif) noexcept
 	return ERR_OK;
 }
 
+// Initialise the GMAC and Phy. The GMAC clocks were already enabled and the pin functions set in CoreIO.
 void ethernetif_hardware_init() noexcept
 {
-	/* Enable GMAC clock. */
-	pmc_enable_periph_clk(ID_GMAC);
+	// Set up Ethernet clock
+	hri_mclk_set_AHBMASK_GMAC_bit(MCLK);
+	hri_mclk_set_APBCMASK_GMAC_bit(MCLK);
+
+	// Setup Ethernet pins
+	SetPinFunction(EthernetClockOutPin, EthernetClockOutPinFunction);
+	for (Pin p : EthernetMacPins)
+	{
+		SetPinFunction(p, EthernetMacPinsPinFunction);
+	}
 
 	/* Disable TX & RX and more. */
 	gmac_network_control(GMAC, 0);
@@ -674,38 +651,6 @@ void ethernetif_hardware_init() noexcept
 
 	/* Set RX buffer size to 1536. */
 	gmac_set_rx_bufsize(GMAC, 0x18);
-
-	/* Clear interrupts */
-	gmac_get_priority_interrupt_status(GMAC, GMAC_QUE_2);
-	gmac_get_priority_interrupt_status(GMAC, GMAC_QUE_1);
-#if (SAMV71B || SAME70B)
-	gmac_get_priority_interrupt_status(GMAC, GMAC_QUE_3);
-	gmac_get_priority_interrupt_status(GMAC, GMAC_QUE_4);
-	gmac_get_priority_interrupt_status(GMAC, GMAC_QUE_5);
-#endif
-
-	/* Set Tx Priority */
-	gs_tx_desc_null.addr = (uint32_t)0xFFFFFFFF;
-	gs_tx_desc_null.status.val = GMAC_TXD_WRAP | GMAC_TXD_USED;
-	gmac_set_tx_priority_queue(GMAC, (uint32_t)&gs_tx_desc_null, GMAC_QUE_2);
-	gmac_set_tx_priority_queue(GMAC, (uint32_t)&gs_tx_desc_null, GMAC_QUE_1);
-#if (SAMV71B || SAME70B)
-	gmac_set_tx_priority_queue(GMAC, (uint32_t)&gs_tx_desc_null, GMAC_QUE_3);
-	gmac_set_tx_priority_queue(GMAC, (uint32_t)&gs_tx_desc_null, GMAC_QUE_4);
-	gmac_set_tx_priority_queue(GMAC, (uint32_t)&gs_tx_desc_null, GMAC_QUE_5);
-#endif
-
-	/* Set Rx Priority */
-	gs_rx_desc_null.addr.val = (uint32_t)0xFFFFFFFF & GMAC_RXD_ADDR_MASK;
-	gs_rx_desc_null.addr.val |= GMAC_RXD_WRAP;
-	gs_rx_desc_null.status.val = 0;
-	gmac_set_rx_priority_queue(GMAC, (uint32_t)&gs_rx_desc_null, GMAC_QUE_2);
-	gmac_set_rx_priority_queue(GMAC, (uint32_t)&gs_rx_desc_null, GMAC_QUE_1);
-#if (SAMV71B || SAME70B)
-	gmac_set_rx_priority_queue(GMAC, (uint32_t)&gs_rx_desc_null, GMAC_QUE_3);
-	gmac_set_rx_priority_queue(GMAC, (uint32_t)&gs_rx_desc_null, GMAC_QUE_4);
-	gmac_set_rx_priority_queue(GMAC, (uint32_t)&gs_rx_desc_null, GMAC_QUE_5);
-#endif
 
 	gmac_rx_init(&gs_gmac_dev);
 	gmac_tx_init(&gs_gmac_dev);
@@ -787,9 +732,7 @@ void ethernetif_terminate() noexcept
 	ethernetTask.TerminateAndUnlink();
 }
 
-extern "C" u32_t millis() noexcept;
-
-extern "C" u32_t sys_now() noexcept
+extern "C" uint32_t sys_now() noexcept
 {
 	return millis();
 }

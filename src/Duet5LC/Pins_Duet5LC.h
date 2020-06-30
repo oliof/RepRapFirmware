@@ -11,23 +11,29 @@
 #define BOARD_SHORT_NAME		"MB5LC"
 #define BOARD_NAME				"Duet 3 MB5LC"
 #define FIRMWARE_NAME			"RepRapFirmware for Duet 3 MB5LC"
-#define DEFAULT_BOARD_TYPE		 BoardType::Duet5LC_v02
-constexpr size_t NumFirmwareUpdateModules = 1;		// 1 module
+#define DEFAULT_BOARD_TYPE		 BoardType::Duet5LC_Unknown
+constexpr size_t NumFirmwareUpdateModules = 2;		// main module and WiFi module
 
 #define IAP_FIRMWARE_FILE		"Duet3Firmware_" BOARD_SHORT_NAME ".bin"
 #define IAP_UPDATE_FILE			"Duet3_SDiap_" BOARD_SHORT_NAME ".bin"
 #define IAP_UPDATE_FILE_SBC		"Duet3_SBCiap_" BOARD_SHORT_NAME ".bin"
-constexpr uint32_t IAP_IMAGE_START = 0x20010000;
+constexpr uint32_t IAP_IMAGE_START = 0x20030000;
+
+#define WIFI_FIRMWARE_FILE		"DuetWiFiServer.bin"
 
 // Features definition
 #define HAS_LWIP_NETWORKING		1
-#define HAS_WIFI_NETWORKING		0
+#define HAS_WIFI_NETWORKING		1
 #define HAS_W5500_NETWORKING	0
+#define HAS_LINUX_INTERFACE		1
 
-#define HAS_CPU_TEMP_SENSOR		0	//TODO temporary!
+#define HAS_MASS_STORAGE		1
 #define HAS_HIGH_SPEED_SD		1
+#define HAS_CPU_TEMP_SENSOR		0					// the temperature sensors don't work in revision A or D chips (revision D is latest as at 2020-06-28)
+
 #define SUPPORT_TMC22xx			1
 #define TMC22xx_HAS_MUX			1
+
 #define HAS_VOLTAGE_MONITOR		1
 #define ENFORCE_MAX_VIN			0
 #define HAS_VREF_MONITOR		1
@@ -88,8 +94,8 @@ constexpr unsigned int MaxTriggers = 16;			// Maximum number of triggers
 constexpr size_t MaxSpindles = 2;					// Maximum number of configurable spindles
 
 constexpr size_t NUM_SERIAL_CHANNELS = 2;			// The number of serial IO channels (USB and one auxiliary UART)
-#define SERIAL_MAIN_DEVICE (*serialUSB)
-#define SERIAL_AUX_DEVICE (*serialUart0)
+#define SERIAL_MAIN_DEVICE (serialUSB)
+#define SERIAL_AUX_DEVICE (serialUart0)
 
 // SerialUSB
 constexpr Pin UsbVBusPin = PortBPin(6);				// Pin used to monitor VBUS on USB port
@@ -119,8 +125,9 @@ constexpr Pin TMC22xxMuxPins[1] = { PortDPin(0) };
 #define TMC22xx_HAS_ENABLE_PINS			0
 #define TMC22xx_HAS_MUX					1
 #define TMC22xx_USES_SERCOM				1
-#define TMC22xx_VARIABLE_NUM_DRIVERS	1
+#define TMC22xx_VARIABLE_NUM_DRIVERS	0
 #define TMC22xx_SINGLE_DRIVER			0
+#define TMC22xx_USE_SLAVEADDR			1
 
 // Define the baud rate used to send/receive data to/from the drivers.
 // If we assume a worst case clock frequency of 8MHz then the maximum baud rate is 8MHz/16 = 500kbaud.
@@ -128,9 +135,16 @@ constexpr Pin TMC22xxMuxPins[1] = { PortDPin(0) };
 // To write a register we need to send 8 bytes. To read a register we send 4 bytes and receive 8 bytes after a programmable delay.
 // So at 500kbaud it takes about 128us to write a register, and 192us+ to read a register.
 // In testing I found that 500kbaud was not reliable, so now using 200kbaud.
-constexpr uint32_t DriversBaudRate = 200000;
-constexpr uint32_t TransferTimeout = 10;				// any transfer should complete within 10 ticks @ 1ms/tick
+constexpr uint32_t DriversBaudRate = 250000;
+constexpr uint32_t TransferTimeout = 2;										// any transfer should complete within 2 ticks @ 1ms/tick
 constexpr uint32_t DefaultStandstillCurrentPercent = 75;
+
+constexpr float DriverSenseResistor = 0.05 + 0.02;							// in ohms
+constexpr float DriverVRef = 180.0;											// in mV
+constexpr float DriverFullScaleCurrent = DriverVRef/DriverSenseResistor;	// in mA
+constexpr float DriverCsMultiplier = 32.0/DriverFullScaleCurrent;
+constexpr float MaximumMotorCurrent = 2000.0;
+constexpr float MaximumStandstillCurrent = 1500.0;
 
 // Thermistors
 constexpr Pin TEMP_SENSE_PINS[NumThermistorInputs] = { PortCPin(0), PortCPin(1), PortCPin(2) }; 	// Thermistor pin numbers
@@ -159,7 +173,11 @@ constexpr Pin ATX_POWER_PIN = PortDPin(10);									// aliased with io5.out
 constexpr Pin PowerMonitorVinDetectPin = PortBPin(8);						// Vin monitor
 constexpr float PowerMonitorVoltageRange = 11.0 * 3.3;						// We use an 11:1 voltage divider
 
+#ifdef DEBUG
+constexpr Pin DiagPin = NoPin;												// Diag pin is shared with SWD
+#else
 constexpr Pin DiagPin = PortAPin(31);
+#endif
 constexpr bool DiagOnPolarity = false;
 
 // SD cards
@@ -171,7 +189,7 @@ constexpr Pin SdMciPins[] = { PortAPin(20), PortAPin(21), PortBPin(18), PortBPin
 constexpr GpioPinFunction SdMciPinsFunction = GpioPinFunction::I;
 Sdhc * const SdDevice = SDHC1;
 constexpr IRQn_Type SdhcIRQn = SDHC1_IRQn;
-constexpr uint32_t ExpectedSdCardSpeed = 15000000;	//TODO correct this!!!!!!!!!!!!!!!
+constexpr uint32_t ExpectedSdCardSpeed = 15000000;
 
 // 12864 LCD
 // The ST7920 datasheet specifies minimum clock cycle time 400ns @ Vdd=4.5V, min. clock width 200ns high and 20ns low.
@@ -197,6 +215,11 @@ constexpr GpioPinFunction SharedSpiPinFunction = GpioPinFunction::C;
 // Serial on IO0
 constexpr uint8_t Serial0SercomNumber = 2;
 constexpr uint8_t Sercom0RxPad = 1;
+#define SERIAL0_ISR0	SERCOM2_0_Handler
+#define SERIAL0_ISR1	SERCOM2_1_Handler
+#define SERIAL0_ISR2	SERCOM2_2_Handler
+#define SERIAL0_ISR3	SERCOM2_3_Handler
+
 constexpr Pin Serial0TxPin = PortBPin(25);
 constexpr Pin Serial0RxPin = PortBPin(24);
 constexpr GpioPinFunction Serial0PinFunction = GpioPinFunction::D;
@@ -205,7 +228,7 @@ constexpr GpioPinFunction Serial0PinFunction = GpioPinFunction::D;
 constexpr Pin EthernetMacPins[] =
 {
 	PortAPin(12), PortAPin(13), PortAPin(14), PortAPin(15), PortAPin(17), PortAPin(18), PortAPin(19),
-	PortCPin(20), PortCPin(22), PortAPin(23)
+	PortCPin(20), PortCPin(22), PortCPin(23)
 };
 constexpr GpioPinFunction EthernetMacPinsPinFunction = GpioPinFunction::L;
 
@@ -214,11 +237,47 @@ constexpr Pin EthernetClockOutPin = PortAPin(16);
 constexpr GpioPinFunction EthernetClockOutPinFunction = GpioPinFunction::M;
 constexpr unsigned int EthernetClockOutGclkNumber = 2;
 
-// WiFi pins. It happens that both SERCOMs use pin function D, so we can use a single pin list for both.
-constexpr unsigned int WiFiSpiSercomNumber = 4;
+// WiFi pins
+
 constexpr unsigned int WiFiUartSercomNumber = 3;
-constexpr Pin WiFiSercomPins[] = { PortAPin(12), PortAPin(13), PortAPin(14), PortAPin(15), PortAPin(16), PortAPin(17) };
-constexpr GpioPinFunction WiFiSercomPinsMode = GpioPinFunction::D;
+constexpr uint8_t WiFiUartRxPad = 1;
+constexpr Pin WiFiUartSercomPins[] = { PortAPin(16), PortAPin(17) };
+constexpr GpioPinFunction WiFiUartSercomPinsMode = GpioPinFunction::D;
+constexpr IRQn WiFiUartSercomIRQn = SERCOM3_0_IRQn;			// this is the first of 4 interrupt numbers
+#define SERIAL_WIFI_ISR0	SERCOM3_0_Handler
+#define SERIAL_WIFI_ISR1	SERCOM3_1_Handler
+#define SERIAL_WIFI_ISR2	SERCOM3_2_Handler
+#define SERIAL_WIFI_ISR3	SERCOM3_3_Handler
+
+constexpr unsigned int WiFiSpiSercomNumber = 4;
+Sercom * const WiFiSpiSercom = SERCOM4;
+constexpr Pin EspMosiPin = PortAPin(15);
+constexpr Pin EspMisoPin = PortAPin(13);
+constexpr Pin EspSclkPin = PortAPin(12);
+constexpr Pin EspSSPin = PortAPin(14);
+constexpr Pin WiFiSpiSercomPins[] = { EspSclkPin, EspMisoPin, EspSSPin, EspMosiPin };
+constexpr GpioPinFunction WiFiSpiSercomPinsMode = GpioPinFunction::D;
+constexpr IRQn WiFiSpiSercomIRQn = SERCOM4_3_IRQn;			// this is the SS Low interrupt, the only one we use
+#define ESP_SPI_HANDLER		SERCOM4_3_Handler
+
+constexpr Pin EspResetPin = PortCPin(21);
+constexpr Pin EspEnablePin = PortCPin(20);
+constexpr Pin EspDataReadyPin = PortAPin(18);
+constexpr Pin SamTfrReadyPin = PortAPin(19);
+constexpr Pin SamCsPin = PortAPin(14);
+
+// SBC interface
+constexpr unsigned int SbcSpiSercomNumber = 0;
+Sercom * const SbcSpiSercom = SERCOM0;
+//constexpr Pin SbcMosiPin = PortAPin(7);
+//constexpr Pin SbcMisoPin = PortAPin(4);
+//constexpr Pin SbcSclkPin = PortAPin(5);
+constexpr Pin SbcSSPin = PortAPin(6);
+constexpr Pin SbcTfrReadyPin = PortBPin(7);
+constexpr Pin SbcSpiSercomPins[] = { PortAPin(4), PortAPin(5), PortAPin(6), PortAPin(7) };
+constexpr GpioPinFunction SbcSpiSercomPinsMode = GpioPinFunction::D;
+constexpr IRQn SbcSpiSercomIRQn = SERCOM0_3_IRQn;			// this is the SS Low interrupt, the only one we use
+#define SBC_SPI_HANDLER		SERCOM0_3_Handler
 
 // Function to look up a pin name and pass back the corresponding index into the pin table
 bool LookupPinName(const char *pn, LogicalPin& lpin, bool& hardwareInverted) noexcept;
@@ -369,22 +428,29 @@ constexpr PinDescription PinTable[] =
 
 constexpr unsigned int NumNamedPins = ARRAY_SIZE(PinTable);
 static_assert(NumNamedPins == 32+32+32+13);
+constexpr unsigned int NumTotalPins = 32+32+32+22;
 
 // DMA channel assignments. Channels 0-3 have individual interrupt vectors, channels 4-31 share an interrupt vector.
-constexpr DmaChannel TmcTxDmaChannel = 0;
-constexpr DmaChannel TmcRxDmaChannel = 1;
-constexpr DmaChannel Adc0TxDmaChannel = 2;
+constexpr DmaChannel DmacChanTmcTx = 0;
+constexpr DmaChannel DmacChanTmcRx = 1;
+constexpr DmaChannel DmacChanAdc0Tx = 2;
 // Next channel is used by ADC0 for receive
-constexpr DmaChannel Adc1TxDmaChannel = 4;
+constexpr DmaChannel DmacChanAdc1Tx = 4;
 // Next channel is used by ADC1 for receive
-//TODO add WiFi DMA channel
+constexpr DmaChannel DmacChanWiFiTx = 6;
+constexpr DmaChannel DmacChanWiFiRx = 7;
+constexpr DmaChannel DmacChanSbcTx = 8;
+constexpr DmaChannel DmacChanSbcRx = 9;
+constexpr DmaChannel DmacChanDotStarTx = 10;
 
-constexpr unsigned int NumDmaChannelsUsed = 6;			// must be at least the number of channels used, may be larger. Max 32 on the SAME5x.
+constexpr unsigned int NumDmaChannelsUsed = 11;			// must be at least the number of channels used, may be larger. Max 32 on the SAME5x.
 
-constexpr uint8_t TmcTxDmaPriority = 0;
-constexpr uint8_t TmcRxDmaPriority = 3;
-constexpr uint8_t AdcTxDmaPriority = 0;
-constexpr uint8_t AdcRxDmaPriority = 2;
+constexpr DmaPriority DmacPrioTmcTx = 0;
+constexpr DmaPriority DmacPrioTmcRx = 1;				// the baud rate is 250kbps so this is not very critical
+constexpr DmaPriority DmacPrioAdcTx = 0;
+constexpr DmaPriority DmacPrioAdcRx = 2;
+constexpr DmaPriority DmacPrioWiFi = 3;					// high speed SPI in slave mode
+constexpr DmaPriority DmacPrioSbc = 3;					// high speed SPI in slave mode
 
 // Timer allocation
 // TC2 and TC3 are used for step pulse generation and software timers
