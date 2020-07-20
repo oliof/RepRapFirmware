@@ -35,14 +35,17 @@
 #include "Version.h"
 #include "Logger.h"
 #include "Tasks.h"
-#include "Hardware/DmacManager.h"
 #include "Hardware/Cache.h"
 #include "Hardware/SharedSpi/SharedSpiDevice.h"
 #include "Math/Isqrt.h"
 #include "Hardware/I2C.h"
 
-#if SAME5x
+#if SAME70
+# include <DmacManager.h>
+static_assert(NumDmaChannelsUsed <= NumDmaChannelsSupported, "Need more DMA channels in CoreNG");
+#elif SAME5x
 # include <AnalogIn.h>
+# include <DmacManager.h>
 using AnalogIn::AdcBits;
 #elif defined(__LPC17xx__)
 # include "LPC/BoardConfig.h"
@@ -1697,7 +1700,11 @@ void Platform::InitialiseInterrupts() noexcept
 #endif
 
 #if SAME5x
-	// DMA IRQ priority is set in DmacManager::Init
+	// SAME5x DMAC has 5 contiguous IRQ numbers
+	for (unsigned int i = 0; i < 5; i++)
+	{
+		NVIC_SetPriority((IRQn)(DMAC_0_IRQn + i), NvicPriorityDMA);
+	}
 #elif SAME70
 	NVIC_SetPriority(XDMAC_IRQn, NvicPriorityDMA);
 #endif
@@ -1793,8 +1800,8 @@ void Platform::Diagnostics(MessageType mtype) noexcept
 		if (resetReason & RSTC_RCAUSE_WDT)		{ resetString.cat(": watchdog"); }
 		if (resetReason & RSTC_RCAUSE_NVM)		{ resetString.cat(": NVM"); }
 		if (resetReason & RSTC_RCAUSE_EXT)		{ resetString.cat(": reset button"); }
-		if (resetReason & RSTC_RCAUSE_SYST)		{ resetString.cat(": system reset request"); }
-		if (resetReason & RSTC_RCAUSE_POR)		{ resetString.cat(": backup/hibernate"); }
+		if (resetReason & RSTC_RCAUSE_SYST)		{ resetString.cat(": software"); }
+		if (resetReason & RSTC_RCAUSE_BACKUP)	{ resetString.cat(": backup/hibernate"); }
 		resetString.cat('\n');
 		Message(mtype, resetString.c_str());
 	}
@@ -1814,10 +1821,6 @@ void Platform::Diagnostics(MessageType mtype) noexcept
 #endif //end ifndef __LPC17xx__
 
 	// Show the reset code stored at the last software reset
-#if SAME5x
-		//TODO
-		Message(mtype, "Last software reset details not available\n");
-#else
 	{
 #if defined(__LPC17xx__)
 		// Reset Reason
@@ -1853,7 +1856,9 @@ void Platform::Diagnostics(MessageType mtype) noexcept
 		memset(srdBuf, 0, sizeof(srdBuf));
 		int slot = -1;
 
-# if SAM4E || SAM4S || SAME70
+#if SAME5x
+		memcpy(srdBuf, reinterpret_cast<const void *>(SEEPROM_ADDR), sizeof(srdBuf));
+#elif SAM4E || SAM4S || SAME70
 		// Work around bug in ASF flash library: flash_read_user_signature calls a RAMFUNC without disabling interrupts first.
 		// This caused a crash (watchdog timeout) sometimes if we run M122 while a print is in progress
 		const irqflags_t flags = cpu_irq_save();
@@ -1922,7 +1927,6 @@ void Platform::Diagnostics(MessageType mtype) noexcept
 			Message(mtype, "Last software reset details not available\n");
 		}
 	}
-#endif	// if SAME5x
 
 	// Show the current error codes
 	MessageF(mtype, "Error status: %" PRIx32 "\n", errorCodeBits);
@@ -2200,29 +2204,11 @@ GCodeResult Platform::DiagnosticTest(GCodeBuffer& gb, const StringRef& reply, Ou
 		break;
 
 	case (unsigned int)DiagnosticTestType::BusFault:
-		// Read from the "Undefined (Abort)" area
-#if SAME5x
-		deliberateError = true;
-		(void)*(reinterpret_cast<const volatile char*>(0x30000000));		//TODO test whether this works
-#elif SAME70
-# if USE_MPU
-		deliberateError = true;
-		(void)*(reinterpret_cast<const volatile char*>(0x30000000));
-# else
+#if SAME70 && !USE_MPU
 		Message(WarningMessage, "There is no abort area on the SAME70 with MPU disabled");
-# endif
-#elif SAM4E || SAM4S
-		deliberateError = true;
-		(void)*(reinterpret_cast<const volatile char*>(0x20800000));
-#elif SAM3XA
-		deliberateError = true;
-		(void)*(reinterpret_cast<const volatile char*>(0x20200000));
-#elif defined(__LPC17xx__)
-		deliberateError = true;
-		// The LPC176x/5x generates Bus Fault exception when accessing a reserved memory address
-		(void)*(reinterpret_cast<const volatile char*>(0x00080000));
 #else
-# error Unsupported processor
+		deliberateError = true;
+		RepRap::GenerateBusFault();
 #endif
 		break;
 

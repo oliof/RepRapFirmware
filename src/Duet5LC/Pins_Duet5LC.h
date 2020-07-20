@@ -8,6 +8,8 @@
 #ifndef SRC_DUET5LC_PINS_DUET5LC_H_
 #define SRC_DUET5LC_PINS_DUET5LC_H_
 
+#include <PinDescription.h>
+
 #define BOARD_SHORT_NAME		"Mini5plus"
 #define BOARD_NAME				"Duet 3 Mini 5+"
 #define FIRMWARE_NAME			"RepRapFirmware for Duet 3 Mini 5+"
@@ -38,6 +40,8 @@ constexpr uint32_t IAP_IMAGE_START = 0x20030000;
 #define ENFORCE_MAX_VIN			0
 #define HAS_VREF_MONITOR		1
 
+#define SUPPORT_CAN_EXPANSION	0
+#define SUPPORT_DOTSTAR_LED		1
 #define SUPPORT_INKJET			0					// set nonzero to support inkjet control
 #define SUPPORT_ROLAND			0					// set nonzero to support Roland mill
 #define SUPPORT_SCANNER			1					// set zero to disable support for FreeLSS scanners
@@ -53,7 +57,7 @@ constexpr uint32_t IAP_IMAGE_START = 0x20030000;
 #define ALLOCATE_DEFAULT_PORTS	0
 #define TRACK_OBJECT_NAMES		1
 
-#define USE_CACHE				0					// ***TEMPORARY*** set nonzero to enable the cache
+#define USE_CACHE				1					// set nonzero to enable the cache
 #define USE_MPU					0					// set nonzero to enable the memory protection unit
 
 // The physical capabilities of the machine
@@ -187,7 +191,7 @@ constexpr bool DiagOnPolarity = false;
 constexpr size_t NumSdCards = 2;
 constexpr Pin SdCardDetectPins[NumSdCards] = { PortBPin(16), PortAPin(2) };
 constexpr Pin SdWriteProtectPins[NumSdCards] = { NoPin, NoPin };
-constexpr Pin SdSpiCSPins[1] = { PortCPin(14) };
+constexpr Pin SdSpiCSPins[NumSdCards - 1] = { PortCPin(14) };
 constexpr Pin SdMciPins[] = { PortAPin(20), PortAPin(21), PortBPin(18), PortBPin(19), PortBPin(20), PortBPin(21) };
 constexpr GpioPinFunction SdMciPinsFunction = GpioPinFunction::I;
 Sdhc * const SdDevice = SDHC1;
@@ -207,6 +211,12 @@ constexpr Pin LcdBeepPin = PortAPin(22);
 constexpr Pin EncoderPinA = PortCPin(11);
 constexpr Pin EncoderPinB = PortDPin(1);
 constexpr Pin EncoderPinSw = PortBPin(9);
+
+// Neopixel output
+constexpr Pin NeopixelOutPin = PortAPin(8);
+constexpr GpioPinFunction NeopixelOutPinFunction = GpioPinFunction::H;		// QSPI Data[0]
+constexpr Pin LcdNeopixelOutPin = PortBPin(14);			// shared with io4.out
+#define DOTSTAR_USES_USART		(0)
 
 // Shared SPI definitions
 constexpr uint8_t SharedSpiSercomNumber = 7;
@@ -241,7 +251,6 @@ constexpr GpioPinFunction EthernetClockOutPinFunction = GpioPinFunction::M;
 constexpr unsigned int EthernetClockOutGclkNumber = 2;
 
 // WiFi pins
-
 constexpr unsigned int WiFiUartSercomNumber = 3;
 constexpr uint8_t WiFiUartRxPad = 1;
 constexpr Pin WiFiUartSercomPins[] = { PortAPin(16), PortAPin(17) };
@@ -431,15 +440,11 @@ constexpr PinDescription PinTable[] =
 
 constexpr unsigned int NumNamedPins = ARRAY_SIZE(PinTable);
 static_assert(NumNamedPins == 32+32+32+13);
-constexpr unsigned int NumTotalPins = 32+32+32+22;
 
 // DMA channel assignments. Channels 0-3 have individual interrupt vectors, channels 4-31 share an interrupt vector.
 constexpr DmaChannel DmacChanTmcTx = 0;
 constexpr DmaChannel DmacChanTmcRx = 1;
-constexpr DmaChannel DmacChanAdc0Tx = 2;
-// Next channel is used by ADC0 for receive
-constexpr DmaChannel DmacChanAdc1Tx = 4;
-// Next channel is used by ADC1 for receive
+constexpr DmaChannel FirstAdcDmaChannel = 2;			// the ADCs use 4 DMA channels
 constexpr DmaChannel DmacChanWiFiTx = 6;
 constexpr DmaChannel DmacChanWiFiRx = 7;
 constexpr DmaChannel DmacChanSbcTx = 8;
@@ -454,6 +459,7 @@ constexpr DmaPriority DmacPrioAdcTx = 0;
 constexpr DmaPriority DmacPrioAdcRx = 2;
 constexpr DmaPriority DmacPrioWiFi = 3;					// high speed SPI in slave mode
 constexpr DmaPriority DmacPrioSbc = 3;					// high speed SPI in slave mode
+constexpr DmaPriority DmacPrioDotStar = 1;				// QSPI in master mode
 
 // Timer allocation
 // TC2 and TC3 are used for step pulse generation and software timers

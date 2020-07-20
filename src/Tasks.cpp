@@ -12,7 +12,7 @@
 #include <TaskPriorities.h>
 
 #if SAME5x
-# include <Hardware/DmacManager.h>
+# include <DmacManager.h>
 # include <hpl_user_area.h>
 #endif
 
@@ -152,6 +152,7 @@ extern "C" [[noreturn]] void AppMain() noexcept
 	}
 
 	CoreInit();
+	DeviceInit();
 #endif
 
 	// Trap integer divide-by-zero.

@@ -44,8 +44,8 @@ constexpr IRQn SBC_SPI_IRQn = SbcSpiSercomIRQn;
 # include "xdmac/xdmac.h"
 #endif
 
-#if USE_DMAC_MANAGER
-# include <Hardware/DmacManager.h>
+#if USE_DMAC_MANAGER || SAME70
+# include <DmacManager.h>
 #endif
 
 #include "RepRapFirmware.h"
@@ -55,8 +55,8 @@ constexpr IRQn SBC_SPI_IRQn = SbcSpiSercomIRQn;
 #include "ObjectModel/ObjectModel.h"
 #include "OutputMemory.h"
 #include "RepRap.h"
+#include <Hardware/Cache.h>
 #include "RTOSIface/RTOSIface.h"
-#include "Hardware/DmacManager.h"
 
 #include <General/IP4String.h>
 
@@ -124,6 +124,7 @@ static bool spi_dma_check_rx_complete() noexcept
 
 #endif
 
+// Set up the transmit DMA but don't enable it
 static void spi_tx_dma_setup(const void *outBuffer, size_t bytesToTransfer) noexcept
 {
 #if USE_DMAC
@@ -165,7 +166,6 @@ static void spi_tx_dma_setup(const void *outBuffer, size_t bytesToTransfer) noex
 	xdmac_configure_transfer(XDMAC, DmacChanSbcTx, &xdmac_tx_cfg);
 
 	xdmac_channel_set_descriptor_control(XDMAC, DmacChanSbcTx, 0);
-	xdmac_channel_enable(XDMAC, DmacChanSbcTx);
 	xdmac_disable_interrupt(XDMAC, DmacChanSbcTx);
 #endif
 
@@ -178,6 +178,7 @@ static void spi_tx_dma_setup(const void *outBuffer, size_t bytesToTransfer) noex
 #endif
 }
 
+// Set up the receive DMA but don't enable it
 static void spi_rx_dma_setup(void *inBuffer, size_t bytesToTransfer) noexcept
 {
 #if USE_DMAC
@@ -219,7 +220,6 @@ static void spi_rx_dma_setup(void *inBuffer, size_t bytesToTransfer) noexcept
 	xdmac_configure_transfer(XDMAC, DmacChanSbcRx, &xdmac_rx_cfg);
 
 	xdmac_channel_set_descriptor_control(XDMAC, DmacChanSbcRx, 0);
-	xdmac_channel_enable(XDMAC, DmacChanSbcRx);
 	xdmac_disable_interrupt(XDMAC, DmacChanSbcRx);
 #endif
 
@@ -701,6 +701,9 @@ bool DataTransfer::IsReady() noexcept
 		{
 		case SpiState::ExchangingHeader:
 		{
+#if SAME5x
+			Cache::InvalidateAfterDMAReceive(&rxHeader, sizeof(rxHeader));
+#endif
 			// (1) Exchanged transfer headers
 			const uint32_t headerResponse = *reinterpret_cast<const uint32_t*>(&rxHeader);
 			if (headerResponse == TransferResponse::BadResponse)
@@ -743,6 +746,9 @@ bool DataTransfer::IsReady() noexcept
 
 		case SpiState::ExchangingHeaderResponse:
 			// (2) Exchanged response to transfer header
+#if SAME5x
+			Cache::InvalidateAfterDMAReceive(&rxResponse, sizeof(rxResponse));
+#endif
 			if (rxResponse == TransferResponse::Success && txResponse == TransferResponse::Success)
 			{
 				if (rxHeader.dataLength != 0 || txHeader.dataLength != 0)
@@ -778,6 +784,9 @@ bool DataTransfer::IsReady() noexcept
 
 		case SpiState::ExchangingData:
 		{
+#if SAME5x
+			Cache::InvalidateAfterDMAReceive(&rxBuffer32, sizeof(rxBuffer32));
+#endif
 			// (3) Exchanged data
 			if (rxBuffer32[0] == TransferResponse::BadResponse)
 			{
@@ -806,6 +815,9 @@ bool DataTransfer::IsReady() noexcept
 
 		case SpiState::ExchangingDataResponse:
 			// (4) Exchanged response to data transfer
+#if SAME5x
+			Cache::InvalidateAfterDMAReceive(&rxResponse, sizeof(rxResponse));
+#endif
 			if (rxResponse == TransferResponse::Success && txResponse == TransferResponse::Success)
 			{
 				// Everything OK

@@ -16,6 +16,7 @@
 #include "WifiFirmwareUploader.h"
 #include "General/IP4String.h"
 #include "WiFiSocket.h"
+#include <Hardware/Cache.h>
 
 static_assert(SsidLength == SsidBufferLength, "SSID lengths in NetworkDefs.h and MessageFormats.h don't match");
 
@@ -38,7 +39,7 @@ static_assert(SsidLength == SsidBufferLength, "SSID lengths in NetworkDefs.h and
 
 #elif SAME5x
 
-# include <Hardware/DmacManager.h>
+# include <DmacManager.h>
 # include <Interrupts.h>
 # include <Serial.h>
 # include <Uart.h>
@@ -512,9 +513,8 @@ void WiFiInterface::Start() noexcept
 	// Make sure the ESP8266 is in the reset state
 	pinMode(EspResetPin, OUTPUT_LOW);
 
-#ifdef DUET_NG
-	// Take the ESP8266 out of power down
-	pinMode(EspEnablePin, OUTPUT_HIGH);
+#if defined(DUET_NG) || defined(DUET_5LC)
+	pinMode(EspEnablePin, OUTPUT_LOW);
 #endif
 
 	// Set up our transfer request pin (GPIO4) as an output and set it low
@@ -566,6 +566,9 @@ void WiFiInterface::Stop() noexcept
 
 		digitalWrite(SamTfrReadyPin, false);		// tell the ESP we can't receive
 		digitalWrite(EspResetPin, false);			// put the ESP back into reset
+#if defined(DUET_NG) || defined(DUET_5LC)
+		digitalWrite(EspEnablePin, false);
+#endif
 		DisableEspInterrupt();						// ignore IRQs from the transfer request pin
 
 		NVIC_DisableIRQ(ESP_SPI_IRQn);
@@ -611,16 +614,17 @@ void WiFiInterface::Spin() noexcept
 
 					// Read the status to get the WiFi server version and MAC address
 					Receiver<NetworkStatusResponse> status;
-					const int32_t rc = SendCommand(NetworkCommand::networkGetStatus, 0, 0, nullptr, 0, status);
+					int32_t rc = SendCommand(NetworkCommand::networkGetStatus, 0, 0, nullptr, 0, status);
 					if (rc > 0)
 					{
 						SafeStrncpy(wiFiServerVersion, status.Value().versionText, ARRAY_SIZE(wiFiServerVersion));
 						macAddress.SetFromBytes(status.Value().macAddress);
 
 						// Set the hostname before anything else is done
-						if (SendCommand(NetworkCommand::networkSetHostName, 0, 0, reprap.GetNetwork().GetHostname(), HostNameLength, nullptr, 0) != ResponseEmpty)
+						rc = SendCommand(NetworkCommand::networkSetHostName, 0, 0, reprap.GetNetwork().GetHostname(), HostNameLength, nullptr, 0);
+						if (rc != ResponseEmpty)
 						{
-							reprap.GetPlatform().Message(NetworkInfoMessage, "Error: Could not set WiFi hostname\n");
+							reprap.GetPlatform().MessageF(NetworkInfoMessage, "Error: Could not set WiFi hostname: %s\n", TranslateWiFiResponse(rc));
 						}
 
 						SetState(NetworkState::active);
@@ -630,7 +634,7 @@ void WiFiInterface::Spin() noexcept
 					{
 						// Something went wrong, maybe a bad firmware image was flashed
 						// Disable the WiFi chip again in this case
-						platform.MessageF(NetworkInfoMessage, "Error: Failed to initialise WiFi module, code %" PRIi32 "\n", rc);
+						platform.MessageF(NetworkInfoMessage, "Error: Failed to initialise WiFi module: %s\n", TranslateWiFiResponse(rc));
 						Stop();
 					}
 				}
@@ -687,7 +691,7 @@ void WiFiInterface::Spin() noexcept
 			else
 			{
 				Stop();
-				platform.MessageF(NetworkInfoMessage, "Failed to change WiFi mode (code %" PRIi32 ")\n", rslt);
+				platform.MessageF(NetworkInfoMessage, "Failed to change WiFi mode: %s\n", TranslateWiFiResponse(rslt));
 			}
 		}
 		else if (currentMode == WiFiState::connected || currentMode == WiFiState::runningAsAccessPoint)
@@ -1039,7 +1043,7 @@ GCodeResult WiFiInterface::HandleWiFiCode(int mcode, GCodeBuffer &gb, const Stri
 			}
 			else
 			{
-				reply.copy("Failed to add SSID to remembered list");
+				reply.printf("Failed to add SSID to remembered list: %s", TranslateWiFiResponse(rslt));
 			}
 		}
 		else
@@ -1077,7 +1081,7 @@ GCodeResult WiFiInterface::HandleWiFiCode(int mcode, GCodeBuffer &gb, const Stri
 				return GCodeResult::ok;
 			}
 
-			reply.copy("Failed to retrieve network list");
+			reply.printf("Failed to retrieve network list: %s", TranslateWiFiResponse(rslt));
 		}
 		return GCodeResult::error;
 
@@ -1094,7 +1098,7 @@ GCodeResult WiFiInterface::HandleWiFiCode(int mcode, GCodeBuffer &gb, const Stri
 					return GCodeResult::ok;
 				}
 
-				reply.copy("Failed to reset the WiFi module to factory settings");
+				reply.printf("Failed to reset the WiFi module to factory settings: %s", TranslateWiFiResponse(rslt));
 				return GCodeResult::error;
 			}
 
@@ -1106,12 +1110,30 @@ GCodeResult WiFiInterface::HandleWiFiCode(int mcode, GCodeBuffer &gb, const Stri
 				return GCodeResult::ok;
 			}
 
-			reply.copy("Failed to remove SSID from remembered list");
+			reply.printf("Failed to remove SSID from remembered list: %s", TranslateWiFiResponse(rslt));
 			return GCodeResult::error;
 		}
 
 	case 589:	// Configure access point
-		if (gb.Seen('S'))
+		if (gb.Seen('T'))
+		{
+			// Special code to set max transmitter power, 0 to 20.5dBm
+			const float powerTimes4 = gb.GetFValue() * 4;
+			if (powerTimes4 < 0.0 || powerTimes4 > 82.0)
+			{
+				reply.copy("Power setting out of range");
+			}
+			else
+			{
+				const int32_t rslt = SendCommand(NetworkCommand::networkSetTxPower, 0, (uint8_t)powerTimes4, nullptr, 0, nullptr, 0);
+				if (rslt == ResponseEmpty)
+				{
+					return GCodeResult::ok;
+				}
+				reply.printf("Failed to set maximum transmit power: %s", TranslateWiFiResponse(rslt));
+			}
+		}
+		else if (gb.Seen('S'))
 		{
 			// Configure access point parameters
 			WirelessConfigurationData config;
@@ -1149,7 +1171,7 @@ GCodeResult WiFiInterface::HandleWiFiCode(int mcode, GCodeBuffer &gb, const Stri
 				return GCodeResult::ok;
 			}
 
-			reply.copy("Failed to configure access point parameters");
+			reply.printf("Failed to configure access point parameters: %s", TranslateWiFiResponse(rslt));
 		}
 		else
 		{
@@ -1172,7 +1194,7 @@ GCodeResult WiFiInterface::HandleWiFiCode(int mcode, GCodeBuffer &gb, const Stri
 			}
 			else
 			{
-				reply.copy("Failed to retrieve own SSID data");
+				reply.printf("Failed to retrieve own SSID data: %s", TranslateWiFiResponse(rslt));
 			}
 		}
 		return GCodeResult::error;
@@ -1188,9 +1210,10 @@ void WiFiInterface::UpdateHostname(const char *hostname) noexcept
 	// Update the hostname if possible
 	if (GetState() == NetworkState::active)
 	{
-		if (SendCommand(NetworkCommand::networkSetHostName, 0, 0, hostname, HostNameLength, nullptr, 0) != ResponseEmpty)
+		const int32_t rslt = SendCommand(NetworkCommand::networkSetHostName, 0, 0, hostname, HostNameLength, nullptr, 0);
+		if (rslt != ResponseEmpty)
 		{
-			platform.Message(GenericMessage, "Error: Could not set WiFi hostname\n");
+			platform.MessageF(GenericMessage, "Error: Could not set WiFi hostname: %s\n", TranslateWiFiResponse(rslt));
 		}
 	}
 }
@@ -1581,6 +1604,7 @@ static void spi_slave_dma_setup(uint32_t dataOutSize, uint32_t dataInSize) noexc
 #endif
 
 #if USE_DMAC || USE_XDMAC || USE_DMAC_MANAGER
+	spi_dma_disable();					// if we don't do this we get strange crashes on the Duet 3 Mini
 	DisableSpi();
 	spi_rx_dma_setup(&bufferIn, dataInSize + sizeof(MessageHeaderEspToSam));
 	spi_tx_dma_setup(&bufferOut, dataOutSize + sizeof(MessageHeaderSamToEsp));
@@ -1656,7 +1680,6 @@ void WiFiInterface::SetupSpi() noexcept
 #endif
 
 #if SAME5x
-	// Set up the correct SPI mode etc. (I am assuming that we don't need to reset the SPI between transactions)
 	WiFiSpiSercom->SPI.INTENCLR.reg = 0xFF;		// disable all interrupts
 	WiFiSpiSercom->SPI.INTFLAG.reg = 0xFF;		// clear any pending interrupts
 #else
@@ -1726,6 +1749,8 @@ int32_t WiFiInterface::SendCommand(NetworkCommand cmd, SocketNumber socketNum, u
 	espWaitingTask = TaskBase::GetCallerTaskHandle();
 	transferPending = true;
 
+	Cache::FlushBeforeDMASend(&bufferIn, sizeof(bufferIn));
+
 #if SAME5x
     spi_slave_dma_setup(dataOutLength, dataInLength);
 	WiFiSpiSercom->SPI.INTFLAG.reg = 0xFF;		// clear any pending interrupts
@@ -1768,6 +1793,8 @@ int32_t WiFiInterface::SendCommand(NetworkCommand cmd, SocketNumber socketNum, u
 		}
 	} while (transferPending);
 
+	espWaitingTask = nullptr;
+
 #if SAME5x
 	{
 		// We don't get and end-of-transfer interrupt, just a start-of-transfer one. So wait until SS is high, then disable the SPI.
@@ -1791,6 +1818,8 @@ int32_t WiFiInterface::SendCommand(NetworkCommand cmd, SocketNumber socketNum, u
 #else
 	while (!spi_dma_check_rx_complete()) { }	// Wait for DMA to complete
 #endif
+
+	Cache::InvalidateAfterDMAReceive(&bufferIn, sizeof(bufferIn));
 
 	// Look at the response
 	if (bufferIn.hdr.formatVersion != MyFormatVersion)
@@ -1951,6 +1980,12 @@ void WiFiInterface::SpiInterrupt() noexcept
 void WiFiInterface::StartWiFi() noexcept
 {
 	digitalWrite(EspResetPin, true);
+
+#if defined(DUET_NG) || defined(DUET_5LC)
+	delayMicroseconds(150);										// ESP8266 datasheet specifies minimum 100us from releasing reset to power up
+	digitalWrite(EspEnablePin, true);
+#endif
+
 #if SAME5x
 	for (Pin p : WiFiUartSercomPins)
 	{
@@ -1969,6 +2004,11 @@ void WiFiInterface::StartWiFi() noexcept
 void WiFiInterface::ResetWiFi() noexcept
 {
 	pinMode(EspResetPin, OUTPUT_LOW);							// assert ESP8266 /RESET
+
+#if defined(DUET_NG) || defined(DUET_5LC)
+	pinMode(EspEnablePin, OUTPUT_LOW);
+#endif
+
 #if defined(DUET_5LC)
 	for (Pin p : WiFiUartSercomPins)
 	{

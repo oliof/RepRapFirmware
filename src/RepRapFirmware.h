@@ -49,12 +49,11 @@ const char *SafeStrptime(const char *buf, const char *format, struct tm *timeptr
 #include <Core.h>
 
 #ifndef SAMC21
-# define SAMC21	0
+# error SAMC21 should be defined as 0 or 1
 #endif
 
 #ifndef SAME5x
-# define SAME5x	0
-typedef uint8_t DmaChannel;
+# error SAME5X should be defined as 0 or 1
 #endif
 
 #if SAME70
@@ -65,6 +64,7 @@ typedef uint8_t DmaChannel;
 
 #if SAME5x
 # include <CoreIO.h>
+# include <Devices.h>
 #endif
 
 // API level definition.
@@ -76,8 +76,6 @@ constexpr unsigned int ApiLevel = 1;
 typedef uint8_t LogicalPin;				// type used to represent logical pin numbers
 constexpr LogicalPin NoLogicalPin = 0xFF;
 constexpr const char *NoPinName = "nil";
-
-typedef uint16_t PwmFrequency;				// type used to represent a PWM frequency. 0 sometimes means "default".
 
 // Enumeration to describe what we want to do with a pin
 enum class PinAccess : int
@@ -188,9 +186,12 @@ struct DriverId
 
 #else
 
-	void SetFromBinary(uint32_t val) noexcept
+	// Set the driver ID from the binary value, returning true if there was a nonzero board number so that the caller knows the address is not valid
+	bool SetFromBinary(uint32_t val) noexcept
 	{
-		localDriver = (uint8_t)val;
+		localDriver = val & 0x000000FF;
+		const uint32_t brdNum = val >> 16;
+		return (brdNum != 0);
 	}
 
 	void SetLocal(unsigned int driver) noexcept
@@ -384,23 +385,6 @@ inline void SetBasePriority(uint32_t prio) noexcept
 	__set_BASEPRI(prio << (8 - __NVIC_PRIO_BITS));
 }
 
-// Atomic section locker, alternative to InterruptCriticalSectionLocker (is safe to call from within an ISR, and may be faster)
-class AtomicCriticalSectionLocker
-{
-public:
-	AtomicCriticalSectionLocker() : flags(cpu_irq_save())
-	{
-	}
-
-	~AtomicCriticalSectionLocker()
-	{
-		cpu_irq_restore(flags);
-	}
-
-private:
-	irqflags_t flags;
-};
-
 // Classes to facilitate range-based for loops that iterate from 0 up to just below a limit
 template<class T> class SimpleRangeIterator
 {
@@ -502,8 +486,6 @@ const FilePosition noFilePosition = 0xFFFFFFFF;
 // Interrupt priorities - must be chosen with care! 0 is the highest priority, 7 or 15 is the lowest.
 // This interacts with FreeRTOS config constant configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY which is currently defined as 3 for the SAME70 and 5 for the SAM4x.
 // ISRs with better (numerically lower) priorities than this value cannot make FreeRTOS calls, but those interrupts wont be disabled even in FreeRTOS critical sections.
-
-typedef uint32_t NvicPriority;
 
 #if __NVIC_PRIO_BITS == 3
 // We have only 8 interrupt priority levels on the SAME70
